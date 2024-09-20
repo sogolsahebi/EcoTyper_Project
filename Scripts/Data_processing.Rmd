@@ -1,0 +1,488 @@
+---
+title: "main"
+author: "Nasim Bondar Sahebi"
+date: "2023-11-07"
+output:
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+
+## load libraries
+
+```{r libraries}
+library(SummarizedExperiment)
+library(MultiAssayExperiment)
+library(dplyr)
+library(knitr)
+library(kableExtra)
+library(tools)
+```
+
+
+## Data Loading and Preparation
+
+This section lists and displays all `.rda` files from the `data` and `data_sex` directories, representing 47 study cohorts.
+
+
+```{r  all data}
+
+# Set base directory
+Base_dir <- "~/BHK lab/Ecotyper/"
+
+# List .rda files in both directories
+data_files <- list.files(path = file.path(Base_dir, "data"), pattern = "\\.rda$", full.names = TRUE)
+data_sex_files <- list.files(path = file.path(Base_dir, "data_sex"), pattern = "\\.rda$", full.names = TRUE)
+
+# Display files
+data_files_df <- data.frame(Files = basename(data_files)) #47 study
+kable(data_files_df, caption = "All studies", col.names = "Cohorts")
+
+```
+
+## Combine all Datasets
+
+This section loads and combines clinical datasets from the `data` and `data_sex` directories. Key steps include:
+
+- Listing `.rda` files from both directories.
+- Extracting and merging clinical data based on common columns.
+- Creating unique study and patient identifiers.
+- Displaying combined clinical data in tables.
+
+The final datasets are saved as `.rds` files for future use.
+
+
+```{r Combine clinicaldata 1 }
+
+
+# Set base directory
+Base_dir <- "~/BHK lab/Ecotyper/"
+
+# List .rda files in both directories
+data_files <- list.files(path = file.path(Base_dir, "data"), pattern = "\\.rda$", full.names = TRUE)
+data_sex_files <- list.files(path = file.path(Base_dir, "data_sex"), pattern = "\\.rda$", full.names = TRUE)
+
+# Display data files
+data_files_df <- data.frame(Files = basename(data_files)) # List all study .rda files
+kable(data_files_df, caption = "All studies", col.names = "Cohorts") 
+
+# Initialize lists for storing column names and clin dataframes for data_files
+column_list <- list()
+clin_list <- list()
+
+for (data_path in data_files) {
+    obj <- load(data_path)  
+    se <- get(obj)
+    
+    clin <- as.data.frame(colData(se))  
+    
+    # Set row names with base name and index
+    base_name <- tools::file_path_sans_ext(basename(data_path))
+    rownames(clin) <- paste0(base_name, "_", seq_len(nrow(clin)))
+    
+    column_list[[data_path]] <- colnames(clin)  # Store column names
+    clin_list[[data_path]] <- clin  # Store clinical data
+}
+
+# Identify common columns across all datasets
+common_columns <- Reduce(intersect, column_list)
+
+# Bind all clin dataframes using the common columns
+combined_clin <- do.call(rbind, lapply(clin_list, function(clin) {
+    clin[, common_columns, drop = FALSE]  # Subset to common columns
+}))
+
+# Create study and patient identifiers
+combined_clin$study <- gsub("\\..*","", basename(rownames(combined_clin)))
+combined_clin$study_patient <- paste0(combined_clin$study, "_", combined_clin$patientid)
+rownames(combined_clin) <- combined_clin$study_patient
+
+# Repeat for data_sex_files
+data_sex_files_df <- data.frame(Files = basename(data_sex_files)) # List all data_sex .rda files
+
+# Initialize lists for storing column names and clin dataframes for data_sex
+column_sex_list <- list()
+clin_sex_list <- list()
+
+for (data_sex_path in data_sex_files) {
+    obj <- load(data_sex_path)  
+    clin_sex <- get(obj)
+    
+    # Set row names with base name and index
+    base_name <- tools::file_path_sans_ext(basename(data_sex_path))
+    rownames(clin_sex) <- paste0(base_name, "_", seq_len(nrow(clin_sex)))
+    
+    column_sex_list[[data_sex_path]] <- colnames(clin_sex)  # Store column names
+    clin_sex_list[[data_sex_path]] <- clin_sex  # Store clinical data
+}
+
+# Identify common columns across all data_sex datasets
+common_sex_columns <- Reduce(intersect, column_sex_list)
+
+# Bind all clin_sex dataframes using the common columns
+combined_clin_sex <- do.call(rbind, lapply(clin_sex_list, function(clin_sex) {
+    clin_sex[, common_sex_columns, drop = FALSE]  # Subset to common columns
+}))
+
+# Create study and patient identifiers for data_sex
+combined_clin_sex <- combined_clin_sex[!is.na(combined_clin_sex$patientid), ]
+combined_clin_sex$study <- gsub("\\..*","", basename(rownames(combined_clin_sex)))
+combined_clin_sex$study_patient <- paste0(combined_clin_sex$study, "_", combined_clin_sex$patientid)
+rownames(combined_clin_sex) <- combined_clin_sex$study_patient
+
+
+kable(head(combined_clin), caption = "Combined Clinical Data from Both Datasets", format = "html") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
+
+# Display the combined_clin table
+kable(head(combined_clin),
+      caption = "Summary of Combined Clinical Data (Data Directory)",
+      col.names = colnames(combined_clin),
+      format = "html") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
+
+# Display the combined_clin_sex table
+kable(head(combined_clin_sex),
+      caption = "Summary of Combined Clinical Data (Data_Sex Directory)",
+      col.names = colnames(combined_clin_sex),
+      format = "html") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
+
+
+# saveRDS(combined_clin, file = file.path("~/BHK LAB/Ecotyper/outputs/", "combined_clin.rds"))
+
+# saveRDS(combined_clin_sex, file = file.path("~/BHK LAB/Ecotyper/outputs/", "combined_clin_sex.rds"))
+
+
+```
+
+## Generate Table
+
+This section of the analysis generates a summary table of clinical characteristics from the combined clinical dataset. The table includes the number of studies, patients, age (with median and IQR), missing values (NA %), sex distribution, cancer types, treatments, response rates, and survival outcomes (PFS and OS). The function `generate_all_data()` processes the data and computes these metrics for both the full dataset and the dataset with sex-specific information.
+
+```{r Table 1 }
+
+Characteristic <- c("N° studies (%)", "N° patients", "Age year", "Median (IQR)", "NA (%)", "Sex", "Female (%)", "Male (%)", "NA (%)", "Cancer Type","Kidney (%)", "Brain (%)","Bladder (%)", "Lung (%)", "Melanoma (%)", "Liver (%)", "Lymph_node (%)", "Unknown (%)","Ureteral (%)", "Pancreas (%)", "HNC (%)","Colon (%)", "Breast (%)" , "Treatment", "PD-1/PD-L1 (%)", "IO+combo (%)", "CTLA4 (%)" , "IO+chemo (%)", "IO+targeted (%)", "Response", "No-response (%)", "Response (%)", "NA (%)", "PFS", "No-progression (%)", "Progressed (%)", "NA (%)", "Median PFS", "IQR PFS", "OS", "Alive (%)", "Dead (%)", "NA (%)", "Median OS", "IQR OS")
+
+
+# Find the intersection of treatments and cancer types between the two datasets
+treatments <- intersect(unique(combined_clin_sex$treatment), unique(combined_clin$treatment))
+cancer_types <- intersect(unique(combined_clin_sex$cancer_type), unique(combined_clin$cancer_type))
+
+# Generate data function with only the common treatments and cancer types
+generate_all_data <- function(data) {
+  All_DATA <- c(
+    paste(length(unique(data$study)), "%"),    # N° studies          
+    length(data$patientid),                    # N° patients          
+    "",                                       # Age year placeholder
+    
+    # 1. Age year placeholder
+    paste(median(data$age, na.rm = TRUE), " (", min(data$age, na.rm = TRUE), "-", max(data$age, na.rm = TRUE), ")", sep = ""),
+    paste(sum(is.na(data$age)), " (", round(sum(is.na(data$age)) / nrow(data) * 100, 1), "%)", sep = ""),
+        
+    "",                                     
+    
+    # 2. Sex placeholder
+    paste(sum(data$sex == "F", na.rm = TRUE) , " (",round(sum(data$sex == "F", na.rm = TRUE) / nrow(data) * 100, 1), "%)"),  # Female percentage
+    paste( sum(data$sex == "M", na.rm = TRUE), " (",round(sum(data$sex == "M", na.rm = TRUE) / nrow(data) * 100, 1), "%)"),  # Male percentage
+    paste(sum(is.na(data$sex)) , " (",round(sum(is.na(data$sex)) / nrow(data) * 100, 1), "%)"),  # NA percentage for sex
+    "",                                       # Cancer Type placeholder
+    
+    # 3. Calculate common cancer type percentages
+    sapply(cancer_types, function(ct) {
+      paste(sum(data$cancer_type == ct), " (", round(sum(data$cancer_type == ct) / nrow(data) * 100, 1), "%)", sep = "")
+    }), 
+    "",                                       
+    
+    # 4. Treatment placeholder for common treatments
+    sapply(treatments, function(tr) {
+      paste(sum(data$treatment == tr), " (", round(sum(data$treatment == tr) / nrow(data) * 100, 1), "%)", sep = "")
+    }), 
+    "",                                      
+    
+    # 5. Response placeholder
+    paste(sum(data$response == "NR", na.rm = TRUE), " (", round(sum(data$response == "NR", na.rm = TRUE) / nrow(data) * 100, 1), "%)"), 
+    paste(sum(data$response == "R", na.rm = TRUE), " (",round(sum(data$response == "R", na.rm = TRUE) / nrow(data) * 100, 1), "%)"),
+    paste(sum(is.na(data$response)), "(", round(sum(is.na(data$response)) / nrow(data) * 100, 1), "%)"),  
+    "",
+    
+    # PFS
+    paste(sum(data$event_occurred_pfs == 0, na.rm = TRUE), " (",
+          round(sum(data$event_occurred_pfs == 0, na.rm = TRUE) / nrow(data) * 100, 1), "%)"), 
+    paste(sum(data$event_occurred_pfs == 1, na.rm = TRUE), "(",
+          round(sum(data$event_occurred_pfs == 1, na.rm = TRUE) / nrow(data) * 100, 1), "%)"),
+    paste(sum(is.na(data$event_occurred_pfs)), " (",
+          round(sum(is.na(data$event_occurred_pfs)) / nrow(data) * 100, 1), "%)"), 
+    paste(round(median(data$survival_time_pfs, na.rm = TRUE), 1)),  # Median PFS
+    round(IQR(data$survival_time_pfs, na.rm = TRUE), 1),              # IQR PFS
+
+    "",                                       
+    
+    # 6. OS placeholder
+    paste(sum(data$event_occurred_os == 0, na.rm = TRUE), " (",
+          round(sum(data$event_occurred_os == 0, na.rm = TRUE) / nrow(data) * 100, 1), "%)"),  # Alive percentage for OS
+    paste(sum(data$event_occurred_os == 1, na.rm = TRUE), " (",
+          round(sum(data$event_occurred_os == 1, na.rm = TRUE) / nrow(data) * 100, 1), "%)"),  # Dead percentage for OS
+    paste(sum(is.na(data$event_occurred_os)), " (",
+          round(sum(is.na(data$event_occurred_os)) / nrow(data) * 100, 1), "%)"),  # NA percentage for OS
+
+    paste(round(median(data$survival_time_os, na.rm = TRUE), 1)),  # Median OS
+    round(IQR(data$survival_time_os, na.rm = TRUE), 1)              # IQR OS
+  )
+  
+  return(All_DATA)
+}
+
+
+
+All_DATA = generate_all_data(combined_clin)
+Data_with_Sex = generate_all_data(combined_clin_sex)
+
+# Create the final dataframe with both All Data and Data with Sex
+final_df <- data.frame(
+  Characteristic = Characteristic,
+  All_DATA = generate_all_data(combined_clin),
+  Data_with_Sex = generate_all_data(combined_clin_sex)
+)
+
+# TODO: Rmeove less than 20 and also IO+ chemo and IO+ targeted delete! "Lymph_node"
+
+# Display the final dataframe with a caption
+kable(final_df, caption = "Summary of All Data and Data with Sex", col.names = c("Characteristic", "All Data", "Data with Sex"))
+
+
+#write.csv(final_df, "~/BHK LAB/Ecotyper/outputs/Summary of All Data and Data with Sex.csv", row.names = TRUE)
+
+
+```
+## Detailed clinical characteristics of the IO datasets
+
+processes clinical data from multiple datasets, extracts key characteristics, and formats them into a summary table.
+
+```{r Table 2}
+
+results <- list()
+
+for (data_path in data_files) {
+    # Load the data object
+    obj <- load(data_path)  
+    se <- get(obj)  
+    
+    # Extract clinical data
+    clin <- data.frame(colData(se))
+    
+    # Base study name
+    base_name <- tools::file_path_sans_ext(basename(data_path))
+    study_parts <- unlist(strsplit(base_name, "__"))
+    study_name <- study_parts[1]
+    
+    # Number of samples
+    n_samples <- nrow(clin)
+    
+    # Expression type: Adjust the condition based on actual data
+    expression_type <- ifelse(any(clin$rna == "rnaseq"), "TPM", ifelse(any(clin$rna == "microarray"), "log2gNor", NA))
+    
+    # Age calculations
+    clin$age <- as.numeric(as.character(clin$age))
+    valid_ages <- na.omit(clin$age)
+    age_median <- if(length(valid_ages) > 0) round(as.numeric(median(valid_ages, na.rm = TRUE)), 1) else NA
+    age_iqr <- if(length(valid_ages) > 1) round(IQR(valid_ages, na.rm = TRUE), 1) else NA
+    age_na <- sum(is.na(clin$age))
+  
+
+    
+    # Sex calculations
+    n_female <- sum(clin$sex == "F", na.rm = TRUE)
+    n_male <- sum(clin$sex == "M", na.rm = TRUE)
+    sex_na <- sum(is.na(clin$sex))
+    
+    # Cancer type
+    cancer_type <- study_parts[2]  # Assuming the second part is the cancer type
+    
+    # Treatment type
+    treatment_type <- paste(unique(clin$treatment), collapse = ", ")
+    
+    # Response counts
+    no_response <- sum(clin$response == "NR", na.rm = TRUE)
+    response <- sum(clin$response == "R", na.rm = TRUE)
+    
+    # PFS counts
+    no_progression <- sum(clin$event_occurred_pfs == 0, na.rm = TRUE)
+    progression <- sum(clin$event_occurred_pfs == 1, na.rm = TRUE)
+    pfs_median <- if (!all(is.na(clin$event_occurred_pfs))) round(median(na.omit(clin$event_occurred_pfs), na.rm = TRUE), 1) else NA
+    pfs_iqr <- if (!all(is.na(clin$event_occurred_pfs))) round(IQR(na.omit(clin$event_occurred_pfs), na.rm = TRUE), 1) else NA
+    
+    # OS counts
+    alive <- sum(clin$event_occurred_os == 0, na.rm = TRUE)
+    dead <- sum(clin$event_occurred_os == 1, na.rm = TRUE)
+    os_median <- if (!all(is.na(clin$event_occurred_os))) round(median(na.omit(clin$event_occurred_os), na.rm = TRUE), 1) else NA
+    os_iqr <- if (!all(is.na(clin$event_occurred_os))) round(IQR(na.omit(clin$event_occurred_os), na.rm = TRUE), 1) else NA
+    
+    # Compile the results for this study
+    results[[base_name]] <- data.frame(Study = study_name, N = n_samples, Expression = expression_type, 
+                                       Age_Median = age_median, Age_IQR = age_iqr, Age_NA = age_na, 
+                                       Female = n_female, Male = n_male, Sex_NA = sex_na, 
+                                       Cancer_Type = cancer_type, Treatment_Type = treatment_type, 
+                                       No_Response = no_response, Response = response, 
+                                       No_Progression = no_progression, Progressed = progression, 
+                                       PFS_Median = pfs_median, PFS_IQR = pfs_iqr, 
+                                       Alive = alive, Dead = dead, OS_Median = os_median, OS_IQR = os_iqr,
+                                       stringsAsFactors = FALSE)
+}
+
+# Convert results to a data frame
+results_df <- do.call(rbind, results)
+
+# Display the results in a nicely formatted table
+kable(results_df, caption = "Detailed clinical characteristics of the IO datasets")
+
+#write.csv(results_df, "~/BHK LAB/Ecotyper/outputs/Detailed_clinical_characteristics_of_the_IO_datasets.csv", row.names = FALSE)
+
+# TODO: delete some studies ( per-cancer and per-sex , per-treatmnets): if <50 or 20 delete this.
+# TODO: only PRE patient, Gide and Riaz and Abacus etc.( use  theprevious dataset)
+# keep rnaseq ( elgibility : only rna seq , 20 atleast and rnaseq only)
+
+```
+
+## Table S4: Detailed clinical characteristics of the IO dataset stratify by sex 																									
+Processes clinical data stratified by sex from multiple datasets, extracts key characteristics, and formats them into a summary table.
+
+```{r Table 3}
+
+
+results <- list()
+
+for (data_path in data_sex_files) {
+    # Load the data object
+    obj <- load(data_path)  
+    clin <- get(obj) 
+    
+    # Base study name
+    base_name <- tools::file_path_sans_ext(basename(data_path))
+    study_parts <- unlist(strsplit(base_name, "__"))
+    study_name <- study_parts[1]
+    
+    # Number of samples
+    n_samples <- nrow(clin)
+    
+    # Expression type: Adjust the condition based on actual data
+    expression_type <- ifelse(any(clin$rna == "rnaseq"), "TPM", ifelse(any(clin$rna == "microarray"), "log2gNor", NA))
+    
+    # Age calculations
+    valid_ages <- na.omit(clin$age)
+    age_median <- if(length(valid_ages) > 0) round(as.numeric(median(valid_ages, na.rm = TRUE)), 1) else NA
+    age_iqr <- if(length(valid_ages) > 1) round(IQR(valid_ages, na.rm = TRUE), 1) else NA
+    age_na <- sum(is.na(clin$age))
+    
+    # Sex calculations
+    n_female <- sum(clin$sex == "F", na.rm = TRUE)
+    n_male <- sum(clin$sex == "M", na.rm = TRUE)
+    sex_na <- sum(is.na(clin$sex))
+    
+    # Cancer type
+    cancer_type <- study_parts[2]  # Assuming the second part is the cancer type
+    
+    # Treatment type
+    treatment_type <- paste(unique(clin$treatment), collapse = ", ")
+    
+    # Response counts
+    no_response <- sum(clin$response == "NR", na.rm = TRUE)
+    response <- sum(clin$response == "R", na.rm = TRUE)
+    
+    # PFS counts
+    no_progression <- sum(clin$event_occurred_pfs == 0, na.rm = TRUE)
+    progression <- sum(clin$event_occurred_pfs == 1, na.rm = TRUE)
+    pfs_median <- if (!all(is.na(clin$event_occurred_pfs))) round(median(na.omit(clin$event_occurred_pfs), na.rm = TRUE), 1) else NA
+    pfs_iqr <- if (!all(is.na(clin$event_occurred_pfs))) round(IQR(na.omit(clin$event_occurred_pfs), na.rm = TRUE), 1) else NA
+    
+    # OS counts
+    alive <- sum(clin$event_occurred_os == 0, na.rm = TRUE)
+    dead <- sum(clin$event_occurred_os == 1, na.rm = TRUE)
+    os_median <- if (!all(is.na(clin$event_occurred_os))) round(median(na.omit(clin$event_occurred_os), na.rm = TRUE), 1) else NA
+    os_iqr <- if (!all(is.na(clin$event_occurred_os))) round(IQR(na.omit(clin$event_occurred_os), na.rm = TRUE), 1) else NA
+    
+    # Compile the results for this study
+    results[[base_name]] <- data.frame(Study = study_name, N = n_samples, Expression = expression_type, 
+                                       Age_Median = age_median, Age_IQR = age_iqr, Age_NA = age_na, 
+                                       Female = n_female, Male = n_male, Sex_NA = sex_na, 
+                                       Cancer_Type = cancer_type, Treatment_Type = treatment_type, 
+                                       No_Response = no_response, Response = response, 
+                                       No_Progression = no_progression, Progressed = progression, 
+                                       PFS_Median = pfs_median, PFS_IQR = pfs_iqr, 
+                                       Alive = alive, Dead = dead, OS_Median = os_median, OS_IQR = os_iqr,
+                                       stringsAsFactors = FALSE)
+}
+
+# Convert results to a data frame
+results_df <- do.call(rbind, results)
+
+# Display the results in a nicely formatted table
+kable(results_df, caption = "Detailed clinical characteristics of the IO dataset stratify by sex ")
+
+#write.csv(results_df, "~/BHK LAB/Ecotyper/outputs/Detailed clinical characteristics of the IO dataset stratify by sex s.csv", row.names = FALSE)
+
+
+```
+
+## Deconvolution Methods, Starting with Jung Lung PD-1/PD-L1 Dataset
+
+Begin with one dataset, focusing on responders (R) vs. non-responders (NR).
+Use a function to retrieve multi-assay data and analyze immune cell proportions based on expression data.
+
+Start with CIBERSORT to identify tumor microenvironment (TME) signatures, such as stromal or immune cells.
+The deconvolution method (CIBERSORT) will show cell type distribution based on the data.
+The model used here is a linear model → visualized using a heatmap.
+
+Also, apply other deconvolution methods like xCell, EPIC, TIMER, and QUANTISEQ (not a priority).
+
+Focus on the Jung Lung (PD-1/PD-L1) dataset and analyze the pattern of TME for responders (R).
+
+
+```{r Deconvulation method for Jun Jun datastes}
+
+# Load the package
+library(immunedeconv)
+library(pheatmap)
+# TODO: package "IOBR"- CRAN.
+
+dat_icb <- get(load("~/BHK lab/Ecotyper/data/ICB_Jung__Lung__PD-(L)1.rda"))
+expr_Jung <- data.frame(assays(dat_icb))
+expr_Jung$group <- NULL
+expr_Jung$group_name <- NULL
+
+clin_jung <- data.frame(colData(dat_icb))
+
+expr_Jung <- 2^expr_Jung - 0.001
+
+# Perform deconvolution using quanTIseq
+result_quanTIseq <- deconvolute(expr_Jung, method = "quantiseq")
+
+# View the results
+head(result_quanTIseq)
+
+# Convert results to a matrix for visualization
+result_matrix <- as.matrix(result_quanTIseq[, -1])  # Exclude the first column (cell type names)
+
+# Create a heatmap
+pheatmap(result_matrix, cluster_rows = TRUE, cluster_cols = TRUE, display_numbers = TRUE, 
+         main = "quanTIseq Deconvolution Heatmap")
+
+
+# TODO: Positive expression. For all expression data, ensure it is on the same scale using log2(TPM + 1).
+# TODO: Create a table specifying the normalized expression that is accepted:
+# 1. Columns (e.g., counts, RNA-seq, TPM, etc.)
+# 2. Generate Table:
+#      - Method: Find available deconvolution methods in the "IOBR" package and include the following:
+#      - Accepted expression and normalization (e.g., counts, RNA-seq, TPM, etc.)
+#      - PubMed ID for each method
+#      - Type of cell (e.g., CIBERSORT --> Immune cells, other combinations)
+#      - Number of cells for each method.
+
+
+# TODO: Perfrom each method+ Create a heatmap for each deconvolution method for a dataset.
+# TODO: Write a separate script for comparing deconvolution methods against data.
+
+```
