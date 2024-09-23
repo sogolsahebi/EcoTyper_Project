@@ -9,7 +9,7 @@ if (!dir.exists(output_dir)) {
 }
 
 # List all .rda files in the data_dir
-files <- list.files(path = "data/", pattern = "\\.rda$", full.names = TRUE)
+files <- list.files(path = "data_all/", pattern = "\\.rda$", full.names = TRUE)
 
 # Loop through each .rda file
 for (file in files) {
