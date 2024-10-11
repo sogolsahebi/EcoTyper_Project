@@ -1,0 +1,402 @@
+---
+title: "Deconvolution Porcess"
+author: "Nasim Bondar Sahebi"
+date: "2023-10-10"
+output:
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+
+## load libraries
+
+```{r libraries}
+library(SummarizedExperiment)
+library(MultiAssayExperiment)
+library(immunedeconv)
+library(ComplexHeatmap)
+library(circlize)
+library(knitr)
+library(kableExtra)
+library(dplyr)
+library(IOBR)
+#library(tools)
+```
+
+ 
+
+## Deconvolution Methods
+
+### Overview of Dataset and Clinical Characteristics
+
+#### Inclusion Criteria for Dataset Analysis:
+
+- **Treatments**: Patients treated with `"PD-1/PD-L1"`, `"IO+combo"`, or `"CTLA4"` were included.
+- **Cancer Types**: Only cancer types with at least 20 patients were considered. Non-solid tumors were prioritized, while solid tumors like `"Lymph_node"` were excluded.
+- **Sample Types**: Focused on `"PRE"` treatment samples to assess baseline characteristics before therapy.
+- **RNA-seq Data**: Only patients with RNA-seq data were included; those with microarray data were excluded.
+- **Data Normalization**: RNA-seq data was normalized using `log2(TPM + 0.001)` to ensure comparable expression levels across patients.
+
+#### Summary of Clinical Characteristics:
+
+- **Number of Studies**: 38 (All Data), 51 (Data with Sex).
+- **Number of Patients**: 2,178 (All Data), 1,758 (Data with Sex).
+
+##### Sex Distribution:
+
+- **Female**: 32.6% (All Data), 40.3% (Data with Sex).
+- **Male**: 48.2% (All Data), 59.7% (Data with Sex).
+- **Sex Not Available**: 19.3% (All Data), 0% (Data with Sex).
+
+##### Cancer Types:
+
+- **Lung Cancer**: 33.9% (All Data), 36.6% (Data with Sex).
+- **Melanoma**: 25.4% (All Data), 23.2% (Data with Sex).
+- **Bladder Cancer**: 16.9% (All Data), 16.2% (Data with Sex).
+- **Other Types**: Includes smaller proportions of kidney, brain, ureteral, pancreas, and esophageal cancers.
+
+##### Treatment Types:
+
+- **PD-1/PD-L1**: 90.4%.
+- **IO+combo**: 5.6%.
+- **CTLA4**: 4%.
+
+##### Treatment Response:
+
+- **Non-Responders**: 55.2% (All Data), 55.6% (Data with Sex).
+- **Responders**: 25.2% (All Data), 25.7% (Data with Sex).
+
+##### Progression-Free Survival (PFS):
+
+- **Median PFS**: 3.1 months.
+- **IQR PFS**: 7.9 months (All Data), 8.6 months (Data with Sex).
+
+##### Overall Survival (OS):
+
+- **Median OS**: 12.2 months (All Data), 12.1 months (Data with Sex).
+- **IQR OS**: 16.8 months (All Data), 16.7 months (Data with Sex).
+
+```{r Deconvulation method for Jun Jun datastes}
+# Set base directory
+Base_dir <- "~/BHK lab/EcoTyper_Project/"
+
+# Load and display Summary and Clinical datasets
+kable(read.csv(file.path(Base_dir, "outputs", "Summary of All Data and Data with Sex.csv")), 
+      caption = "Summary of All Data and Data with Sex") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F) %>%
+  scroll_box(height = "400px")
+
+kable(read.csv(file.path(Base_dir, "outputs", "Detailed_clinical_characteristics_of_the_IO_datasets.csv")), 
+      caption = "Detailed Clinical Characteristics of the IO Datasets") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F) %>%
+  scroll_box(height = "400px")
+
+```
+
+
+### 2. Generate a Table of IOBR Deconvolution Methods
+
+Table summarizing the deconvolution methods in the  [IOBR package](https://github.com/IOBR/IOBR). Include the following columns:
+
+1. **Method**: List the available deconvolution methods.
+2. **Accepted Expression and Normalization**: Specify accepted expression types (e.g., counts, RNA-seq, TPM, etc.).
+3. **PubMed ID**: Include the PubMed ID or DOI link for each method.
+4. **Type of Cell**: Indicate the type of cells targeted by each method (e.g., CIBERSORT --> Immune cells).
+5. **Number of Cells**: Provide the number of cell types for each method.
+
+
+```{r IBOR Deconvulation methods}
+
+methods_table <- data.frame(
+  Method = c(
+    "[CIBERSORT](https://cibersort.stanford.edu/)",
+    "[EPIC](https://gfellerlab.shinyapps.io/EPIC_1-1/)",
+    "[MCPcounter](https://github.com/ebecht/MCPcounter/blob/master/Source/License)",
+    "[xCell](https://github.com/dviraran/xCell/blob/master/DESCRIPTION)",
+    "[ESTIMATE](https://bioinformatics.mdanderson.org/public-software/estimate/)",
+    "[TIMER](http://cistrome.org/TIMER/download.html)",
+    "[quanTIseq](http://icbi.at/software/quantiseq/doc/index.html)",
+    "[IPS](https://github.com/icbi-lab/Immunophenogram/blob/master/LICENSE)"
+  ),
+  Accepted_Expression_Normalization = c(
+    "Counts, RNA-seq, TPM, FPKM",
+    "RNA-seq, TPM, FPKM",
+    "RNA-seq, TPM, FPKM",
+    "RNA-seq, TPM, FPKM, Counts",
+    "RNA-seq, FPKM",
+    "RNA-seq, TPM",
+    "RNA-seq, TPM",
+    "RNA-seq, TPM"
+  ),
+  PubMed_ID = c(
+    "[PMID: 25977888](https://doi.org/10.1038/nmeth.3337)",
+    "[PMID: 28783075](https://doi.org/10.7554/eLife.26476)",
+    "[PMID: 27798624](https://doi.org/10.1186/s13059-016-1070-5)",
+    "[PMID: 29141660](https://doi.org/10.1186/s13059-017-1349-1)",
+    "[PMID: 24113773](https://doi.org/10.1038/ncomms3612)",
+    "[PMID: 27423106](https://doi.org/10.1186/s13059-016-1028-7)",
+    "[PMID: 30992056](https://doi.org/10.1186/s13073-019-0638-6)",
+    "[PMID: 28052254](https://doi.org/10.1016/j.celrep.2016.12.019)"
+  ),
+  Cell_Type = c(
+    "Immune cells",
+    "Cancer cells, Immune cells",
+    "Immune cells, Stromal cells",
+    "Immune cells, Stromal cells",
+    "Tumor purity, Stromal and Immune cells",
+    "Immune cells",
+    "Tumor immune cells",
+    "Immune phenotypes"
+  ),
+  Number_of_Cells = c(
+    "22 immune cell types",
+    "Multiple (B cells, T cells, Macrophages)",
+    "10 cell types",
+    "64 cell types",
+    "Not specified",
+    "6 immune cell types",
+    "10 immune cell types",
+    "28 immune cell types"
+  ),
+  License = c(
+    "free for non-commercial use only",
+    "free for non-commercial use only (Academic License)",
+    "free [(GPL 3.0)](https://github.com/ebecht/MCPcounter/blob/master/Source/License)",
+    "free [(GPL 3.0)](https://github.com/dviraran/xCell/blob/master/DESCRIPTION)",
+    "free [(GPL 2.0)](https://bioinformatics.mdanderson.org/estimate/)",
+    "free [(GPL 2.0)](http://cistrome.org/TIMER/download.html)",
+    "free [(BSD)](https://github.com/icbi-lab/immunedeconv/blob/master/LICENSE.md)",
+    "free [(BSD)](https://github.com/icbi-lab/Immunophenogram/blob/master/LICENSE)"
+  ),
+  Citation = c(
+    "Newman, A. M., Liu, C. L., Green, M. R., Gentles, A. J., Feng, W., Xu, Y., … Alizadeh, A. A. (2015). Robust enumeration of cell subsets from tissue expression profiles. Nature Methods, 12(5), 453–457. [https://doi.org/10.1038/nmeth.3337](https://doi.org/10.1038/nmeth.3337)",
+    "Racle, J., de Jonge, K., Baumgaertner, P., Speiser, D. E., & Gfeller, D. (2017). Simultaneous enumeration of cancer and immune cell types from bulk tumor gene expression data. ELife, 6, e26476. [https://doi.org/10.7554/eLife.26476](https://doi.org/10.7554/eLife.26476)",
+    "Becht, E., Giraldo, N. A., Lacroix, L., Buttard, B., Elarouci, N., Petitprez, F., … de Reyniès, A. (2016). Estimating the population abundance of tissue-infiltrating immune and stromal cell populations using gene expression. Genome Biology, 17(1), 218. [https://doi.org/10.1186/s13059-016-1070-5](https://doi.org/10.1186/s13059-016-1070-5)",
+    "Aran, D., Hu, Z., & Butte, A. J. (2017). xCell: digitally portraying the tissue cellular heterogeneity landscape. Genome Biology, 18(1), 220. [https://doi.org/10.1186/s13059-017-1349-1](https://doi.org/10.1186/s13059-017-1349-1)",
+    "Vegesna R, Kim H, Torres-Garcia W, …, Verhaak R. (2013). Inferring tumour purity and stromal and immune cell admixture from expression data. Nature Communications 4, 2612. [http://doi.org/10.1038/ncomms3612](http://doi.org/10.1038/ncomms3612)",
+    "Li, B., Severson, E., Pignon, J.-C., Zhao, H., Li, T., Novak, J., … Liu, X. S. (2016). Comprehensive analyses of tumor immunity: implications for cancer immunotherapy. Genome Biology, 17(1), 174. [https://doi.org/10.1186/s13059-016-1028-7](https://doi.org/10.1186/s13059-016-1028-7)",
+    "Finotello, F., Mayer, C., Plattner, C., Laschober, G., Rieder, D., Hackl, H., …, Sopper, S. (2019). Molecular and pharmacological modulators of the tumor immune contexture revealed by deconvolution of RNA-seq data. Genome medicine, 11(1), 34. [https://doi.org/10.1186/s13073-019-0638-6](https://doi.org/10.1186/s13073-019-0638-6)",
+    "Charoentong, P., et al. (2017). Pan-cancer Immunogenomic Analyses Reveal Genotype-Immunophenotype Relationships and Predictors of Response to Checkpoint Blockade. Cell Reports 18, 248-262. [https://doi.org/10.1016/j.celrep.2016.12.019](https://doi.org/10.1016/j.celrep.2016.12.019)"
+  )
+)
+
+# Generate the table using kable
+kable(methods_table, format = "markdown", align = "l", caption = "Deconvolution Methods in IOBR Package with License and Citation Links")
+
+```
+
+Here’s the corrected version of the document:
+
+---
+
+### CIBERSORT on **Jung Lung PD-1/PD-L1**
+
+We begin by analyzing the **Jung Lung PD-1/PD-L1** dataset, which contains clinical characteristics of patients who received PD-1/PD-L1 treatment for lung cancer. The dataset has been normalized using RNA-seq data and includes various clinical factors such as age, sex, response to treatment, progression-free survival (PFS), and overall survival (OS).
+
+**Important Note**: Currently, the RNA-seq data is in log2(TPM + 0.001) format. To ensure consistency, we need to convert the expression data to a positive expression range using **log2(TPM + 1)** for all samples, so all expression data is on the same scale.
+
+We will begin the analysis with a focus on **responders (R) vs. non-responders (NR)**. The first step is to retrieve multi-assay data and analyze immune cell proportions based on the expression data.
+
+We'll start with **CIBERSORT** to identify tumor microenvironment (TME) signatures, such as stromal or immune cell types. CIBERSORT uses a linear model to estimate the cell type distribution within the TME, which will be visualized using a heatmap.
+
+For this analysis, we will focus on the **Jung Lung (PD-1/PD-L1)** dataset, specifically examining the TME patterns for responders (R).
+
+**Next Steps**: We will also apply other deconvolution methods, such as xCell, EPIC, TIMER, and QUANTISEQ, though this is not a priority at this stage.
+
+
+```{r IBOR Deconvolution method for Jung Jung datasets, fig.height=12, fig.width=10}
+
+# Load the specific .rda file (ICB_Jung_Lung_PD-L1)
+ICB_jung <- get(load(file.path(Base_dir, "data_all", "ICB_Jung__Lung__PD-(L)1.rda")))
+
+# Extract expression data and convert to a matrix
+expr_Jung <- data.frame(assays(ICB_jung))
+expr_Jung$group <- NULL
+expr_Jung$group_name <- NULL
+expr_Jung <- as.matrix(expr_Jung)
+
+# Extract clinical data
+clin_jung <- data.frame(colData(ICB_jung))
+
+# Step 1: Convert expression data from log2(TPM + 0.001) back to TPM
+expr_Jung_TPM <- 2^(expr_Jung) - 0.001
+expr_Jung <- log2(expr_Jung_TPM + 1)
+
+# Run deconvolution analysis using CIBERSORT
+cibersort_results <- deconvo_tme(eset = expr_Jung, method = "cibersort")
+cibersort_results <- as.data.frame(cibersort_results)
+rownames(cibersort_results) <- colnames(expr_Jung)
+cibersort_results$ID <- NULL
+colnames(cibersort_results) <- gsub("_CIBERSORT", "", colnames(cibersort_results))
+
+
+kable(cibersort_results, format = "html", caption = "CIBERSORT Deconvolution Results") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+
+
+# Correct column names for removal
+filtered_cibersort_results <- cibersort_results %>%
+select(-`P-value`, -`Correlation`, -`RMSE`)
+
+
+##1. non scaled version
+reorder_index <- order(clin_jung$response)
+ filtered_cibersort_results <-  filtered_cibersort_results[reorder_index, ]
+clin_jung <- clin_jung[reorder_index, ]
+
+response_annotation <- HeatmapAnnotation(Response = clin_jung$response)
+
+# Create a heatmap with scaled results
+h1 <- Heatmap(t(as.matrix( filtered_cibersort_results)), name = "CIBERSORT Results (Not Scaled)", top_annotation  = response_annotation,cluster_rows = F,column_split = clin_jung$response)
+
+## 2. scaled version
+# Scale and cap the filtered CIBERSORT results between -4 and 4
+scaled_cibersort_results <- as.data.frame(scale(filtered_cibersort_results))
+#scaled_cibersort_results <- pmax(pmin(scaled_cibersort_results, 4), -4)
+
+reorder_index <- order(clin_jung$response)
+scaled_cibersort_results <- scaled_cibersort_results[reorder_index, ]
+clin_jung <- clin_jung[reorder_index, ]
+
+response_annotation <- HeatmapAnnotation(Response = clin_jung$response)
+
+# Create a heatmap with scaled results
+h2 <- Heatmap(t(as.matrix(scaled_cibersort_results)), name = "CIBERSORT Results (Scaled)", top_annotation  = response_annotation,cluster_rows = F,column_split = clin_jung$response)
+
+h1
+h2
+# TODO: take median
+```
+
+```{r IBOR other Deconvolution  for Jung Jung datasets, fig.height=8, fig.width=10}
+#TODO: you can use median of its no scaled:
+common_color_scale <- colorRamp2(c(-4, 0, 4), c("blue", "white", "red"))
+
+# Run deconvolution analysis using epic
+epic_results <- as.data.frame(deconvo_tme(eset = expr_Jung, method = "epic"))
+rownames(epic_results) <- epic_results$ID 
+epic_results$ID <- NULL
+
+kable(epic_results, format = "html", caption = "Epic Deconvolution Results") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+
+reorder_index <- order(clin_jung$response)
+epic_results <- epic_results[reorder_index, ]
+clin_jung <- clin_jung[reorder_index, ]
+
+epic_results_scaled <- as.data.frame(scale(epic_results))
+
+# Create annotation for heatmap based on response
+response_annotation <- HeatmapAnnotation(Response = clin_jung$response)
+
+# Create the heatmap for scaled EPIC results
+Heatmap(t(as.matrix(epic_results_scaled)), 
+        name = "EPIC Results (Scaled)", 
+        top_annotation = response_annotation, 
+        cluster_rows = FALSE, 
+        column_split = clin_jung$response, 
+        col = common_color_scale)
+
+# Run deconvolution analysis using MCPcounter
+mcpcounter_results <- as.data.frame(deconvo_tme(eset = expr_Jung, method = "mcpcounter"))
+rownames(mcpcounter_results) <- colnames(expr_Jung)
+mcpcounter_results$ID <- NULL
+
+kable(mcpcounter_results, format = "html", caption = "MCPcounter Deconvolution Results") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+
+mcpcounter_results <- mcpcounter_results[reorder_index, ]
+mcpcounter_results_scaled <- as.data.frame(scale(mcpcounter_results))
+
+
+# Create the heatmap for scaled MCPcounter results
+Heatmap(t(as.matrix(mcpcounter_results_scaled)), 
+        name = "MCPcounter Results (Scaled)", 
+        top_annotation = response_annotation, 
+        cluster_rows = FALSE, 
+        column_split = clin_jung$response, 
+        col = common_color_scale)
+
+# Run deconvolution analysis using xCell
+xcell_results <- as.data.frame(deconvo_tme(eset = expr_Jung, method = "xcell"))
+rownames(xcell_results) <- colnames(expr_Jung)
+xcell_results$ID <- NULL
+
+kable(xcell_results, format = "html", caption = "xCell Deconvolution Results") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+
+xcell_results <- xcell_results[reorder_index, ]
+xcell_results_scaled <- as.data.frame(scale(xcell_results))
+
+# Create the heatmap for scaled xCell results
+Heatmap(t(as.matrix(xcell_results_scaled)), 
+        name = "xCell Results (Scaled)", 
+        top_annotation = response_annotation, 
+        cluster_rows = FALSE, 
+        column_split = clin_jung$response, 
+        col = common_color_scale)
+
+# Run deconvolution analysis using ESTIMATE
+estimate_results <- as.data.frame(deconvo_tme(eset = expr_Jung, method = "estimate"))
+rownames(estimate_results) <- colnames(expr_Jung)
+estimate_results$ID <- NULL
+
+kable(estimate_results, format = "html", caption = "ESTIMATE Deconvolution Results") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+
+estimate_results <- estimate_results[reorder_index, ]
+estimate_results_scaled <- as.data.frame(scale(estimate_results))
+
+# Create the heatmap for scaled ESTIMATE results
+Heatmap(t(as.matrix(estimate_results_scaled)), 
+        name = "ESTIMATE Results (Scaled)", 
+        top_annotation = response_annotation, 
+        cluster_rows = FALSE, 
+        column_split = clin_jung$response, 
+        col = common_color_scale)
+
+#TODO: check why time rnot working ( except IPS) and see what is process working , how portion across samples are estimating ( if any ML alogrithm used)
+# TODO: sending for review and next step
+
+# # Run deconvolution analysis using TIMER
+# 
+# timer_results <- as.data.frame(deconvo_tme(eset = expr_Jung, method = "timer"))
+# rownames(timer_results) <- colnames(expr_Jung)
+# 
+# kable(timer_results, format = "html", caption = "TIMER Deconvolution Results") %>%
+#   kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+# 
+# timer_results <- timer_results[reorder_index, ]
+# timer_results_scaled <- as.data.frame(scale(timer_results))
+# 
+# # Create the heatmap for scaled TIMER results
+# Heatmap(t(as.matrix(timer_results_scaled)), 
+#         name = "TIMER Results (Scaled)", 
+#         top_annotation = response_annotation, 
+#         cluster_rows = FALSE, 
+#         column_split = clin_jung$response, 
+#         col = common_color_scale)
+# 
+# # Run deconvolution analysis using quanTIseq
+# quantiseq_results <- as.data.frame(deconvo_tme(eset = expr_Jung, method = "quantiseq"))
+# rownames(quantiseq_results) <- colnames(expr_Jung)
+# 
+# kable(quantiseq_results, format = "html", caption = "quanTIseq Deconvolution Results") %>%
+#   kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+# 
+# quantiseq_results <- quantiseq_results[reorder_index, ]
+# quantiseq_results_scaled <- as.data.frame(scale(quantiseq_results))
+# 
+# # Create the heatmap for scaled quanTIseq results
+# Heatmap(t(as.matrix(quantiseq_results_scaled)), 
+#         name = "quanTIseq Results (Scaled)", 
+#         top_annotation = response_annotation, 
+#         cluster_rows = FALSE, 
+#         column_split = clin_jung$response, 
+#         col = common_color_scale)
+
+
+```
