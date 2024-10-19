@@ -81,7 +81,7 @@ library(IOBR)
 # Set base directory
 Base_dir <- "~/BHK lab/EcoTyper_Project/"
 
-# Load and display Summary and Clinical datasets
+# Load and display Summary and Clinical datasets.
 kable(read.csv(file.path(Base_dir, "outputs", "Summary of All Data and Data with Sex.csv")), 
       caption = "Summary of All Data and Data with Sex") %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F) %>%
