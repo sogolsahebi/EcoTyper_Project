@@ -132,7 +132,6 @@ kable(head(combined_clin), caption = "Summary of Combined Clinical Data (Data Di
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F) %>%
   scroll_box(height = "400px")
 
-
 ```
 
 ## Summary of All Data and Data with Sex
@@ -180,10 +179,18 @@ cancer_types <- unique(combined_clin_sex$cancer_type)
 Characteristic <- c("N° studies", "N° patients", "Age year", "Median (IQR)", "NA (%)", "Sex", "Female (%)", "Male (%)", "NA (%)", "Cancer Type",paste0(cancer_types, " (%)"), "Treatment", paste0(treatments, " (%)"), "Response", "No-response (%)", "Response (%)", "NA (%)", "PFS", "No-progression (%)", "Progressed (%)", "NA (%)", "Median PFS", "IQR PFS", "OS", "Alive (%)", "Dead (%)", "NA (%)", "Median OS", "IQR OS")
 
 
+# Function to extract the base of the study name, ignoring the "_F" and "_M" ( for counting data sex with same study name)
+get_study_base <- function(study_name) {
+  return(sub("_[FM]$", "", study_name))
+}
+
 # Generate data function with only the common treatments and cancer types
 generate_all_data <- function(data) {
+  
+  data$study_base <- sapply(data$study, get_study_base)
+   
   All_DATA <- c(
-    length(unique(data$study)),    # N° studies          
+    length(unique(data$study_base)),    # N° studies          
     length(data$patientid),                    # N° patients          
     "",                                       # Age year placeholder
     
@@ -245,7 +252,6 @@ generate_all_data <- function(data) {
 }
 
 
-
 All_DATA = generate_all_data(combined_clin)
 Data_with_Sex = generate_all_data(combined_clin_sex)
 
@@ -267,6 +273,17 @@ kable(final_df, caption = "Summary of All Data and Data with Sex",
 
 
 ```
+# Studies that we are focusing on after the exclusion
+
+```{r Studies after exclusion}
+
+kable(unique(combined_clin$study), caption = "All studies", col.names = "Cohorts") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F) %>%
+  scroll_box(height = "400px")
+
+```
+
+
 ## Detailed clinical characteristics of the IO datasets
 
 processes clinical data from multiple datasets, extracts key characteristics, and formats them into a summary table.
