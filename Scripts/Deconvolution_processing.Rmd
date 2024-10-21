@@ -23,7 +23,6 @@ library(knitr)
 library(kableExtra)
 library(dplyr)
 library(IOBR)
-#library(tools)
 ```
 
 ## Deconvolution Methods
@@ -93,7 +92,6 @@ kable(read.csv(file.path(Base_dir, "outputs", "Detailed_clinical_characteristics
   scroll_box(height = "400px")
 
 ```
-
 
 ### 2. Generate a Table of IOBR Deconvolution Methods
 
@@ -260,7 +258,7 @@ For this analysis, we will focus on the **Jung Lung (PD-1/PD-L1)** dataset, spec
 **Next Steps**: We will also apply other deconvolution methods, such as xCell, EPIC, TIMER, and QUANTISEQ, though this is not a priority at this stage.
 
 
-```{r IBOR Deconvolution method for Jung Jung datasets, fig.height=12, fig.width=10}
+```{r IBOR Deconvolution method for Jung Jung datasets, fig.height=8, fig.width=11}
 
 # Load the specific .rda file (ICB_Jung_Lung_PD-L1)
 ICB_jung <- get(load(file.path(Base_dir, "data_all", "ICB_Jung__Lung__PD-(L)1.rda")))
@@ -295,39 +293,7 @@ kable(cibersort_results, format = "html", caption = "CIBERSORT Deconvolution Res
 filtered_cibersort_results <- cibersort_results %>%
 select(-`P-value`, -`Correlation`, -`RMSE`)
 
-
-##1. non scaled version
-reorder_index <- order(clin_jung$response)
- filtered_cibersort_results <-  filtered_cibersort_results[reorder_index, ]
-clin_jung <- clin_jung[reorder_index, ]
-
-response_annotation <- HeatmapAnnotation(Response = clin_jung$response)
-
-# Create a heatmap with scaled results
-h1 <- Heatmap(t(as.matrix( filtered_cibersort_results)), name = "CIBERSORT Results (Not Scaled)", top_annotation  = response_annotation,cluster_rows = F,column_split = clin_jung$response)
-
-
-
-## 2. Apply scaling to each row based on min, median, and max
-# Define the color scale for each row
-common_color_scale <- function(x) {
-  data_min <- min(x)
-  data_median <- median(x)
-  data_max <- max(x)
-  colorRamp2(c(data_min, data_median, data_max), c("#2166AC", "#F7F7F7", "#B2182B"))(x)
-}
-
-# Apply the custom color scale row by row
-h2 <- Heatmap(t(as.matrix(filtered_cibersort_results)), 
-              name = "CIBERSORT Results (Min-Median-Max)", 
-              top_annotation = response_annotation, 
-              cluster_rows = F, 
-              column_split = clin_jung$response,
-              col = common_color_scale)
-
-
-
-## 3.scaled version with scale
+# Scaled Heatmap
 # Scale and cap the filtered CIBERSORT results between -4 and 4
 scaled_cibersort_results <- as.data.frame(scale(filtered_cibersort_results))
 #scaled_cibersort_results <- pmax(pmin(scaled_cibersort_results, 4), -4)
@@ -339,59 +305,46 @@ clin_jung <- clin_jung[reorder_index, ]
 response_annotation <- HeatmapAnnotation(Response = clin_jung$response)
 
 # Create a heatmap with scaled results
-h3 <- Heatmap(t(as.matrix(scaled_cibersort_results)), name = "CIBERSORT Results (Scaled)", top_annotation  = response_annotation,cluster_rows = F,column_split = clin_jung$response)
+h <- Heatmap(t(as.matrix(scaled_cibersort_results)), name = "CIBERSORT Results (Scaled)", top_annotation  = response_annotation,cluster_rows = F,column_split = clin_jung$response)
 
-h1
-h2
-h3# TODO: keep this.1.
 
-#TODO: shared heatmap(by Franoosh)2.
+h
 
 ```
 
-```{r IBOR other Deconvolution  for Jung Jung datasets, fig.height=12, fig.width= 11}
+```{r IBOR other Deconvolution  for Jung Jung datasets, fig.height=4, fig.width= 12}
 
-# Define a reusable function for creating both scaled and min-median-max heatmaps
+# Define Function For all Deconvolution all remaing methods 
 create_heatmaps <- function(data, name) {
+  
   # Reorder data based on response
   reorder_index <- order(clin_jung$response)
   data <- data[reorder_index, ]
   clin_jung <- clin_jung[reorder_index, ]
 
   # Handle missing values: replace NAs with the median of each column
-  data[is.na(data)] <- apply(data, 2, median, na.rm = TRUE)
+  #data[is.na(data)] <- apply(data, 2, median, na.rm = TRUE)
 
-  # Create annotation for the heatmap
+  # Annotation for the heatmap
   response_annotation <- HeatmapAnnotation(Response = clin_jung$response)
 
-  # 1. Scaled version
+  # Scaled version
   data_scaled <- as.data.frame(scale(data))
   h_scaled <- Heatmap(t(as.matrix(data_scaled)), name = paste(name, "(Scaled)"), 
                       top_annotation = response_annotation, 
                       cluster_rows = FALSE, column_split = clin_jung$response, 
                       col = colorRamp2(c(-4, 0, 4), c("blue", "white", "red")))
 
-  # Draw the scaled heatmap
+  # Display scaled heatmap
   draw(h_scaled)
 
-  # 2. Min-Median-Max version with adjusted color scale
-  data_min <- min(as.numeric(unlist(data)), na.rm = TRUE)
-  data_median <- median(as.numeric(unlist(data)), na.rm = TRUE)
-  data_max <- max(as.numeric(unlist(data)), na.rm = TRUE)
-  custom_color_scale <- colorRamp2(c(data_min, data_median, data_max), c("#2166AC", "#F7F7F7", "#B2182B"))
-
-  h_min_median_max <- Heatmap(t(as.matrix(data)), name = paste(name, "(Min-Median-Max)"), 
-                              top_annotation = response_annotation, 
-                              cluster_rows = FALSE, column_split = clin_jung$response, 
-                              col = custom_color_scale)
-
-  # Draw the Min-Median-Max heatmap
-  draw(h_min_median_max)
 }
+
 
 # Example usage for EPIC, MCPcounter, xCell, and ESTIMATE results
 
-# Run deconvolution analysis and generate heatmaps for EPIC
+#2.EPIC
+# Run deconvolution analysis and generate heatmap for EPIC
 epic_results <- as.data.frame(deconvo_tme(eset = expr_Jung, method = "epic"))
 rownames(epic_results) <- epic_results$ID
 epic_results$ID <- NULL
@@ -399,22 +352,35 @@ kable(epic_results, format = "html", caption = "EPIC Deconvolution Results") %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
 create_heatmaps(epic_results, "EPIC Results")
 
-# Run deconvolution analysis and generate heatmaps for MCPcounter
+```
+
+```{r MCPcounter for Jung Jung datasets, fig.height=6, fig.width= 10}
+
+#3.MCPcounter
+
+# Run deconvolution analysis and generate heatmap for MCPcounter
 mcpcounter_results <- as.data.frame(deconvo_tme(eset = expr_Jung, method = "mcpcounter"))
 rownames(mcpcounter_results) <- colnames(expr_Jung)
 mcpcounter_results$ID <- NULL
 kable(mcpcounter_results, format = "html", caption = "MCPcounter Deconvolution Results") %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
 create_heatmaps(mcpcounter_results, "MCPcounter Results")
+```
 
-# Run deconvolution analysis and generate heatmaps for xCell
+```{r xCell for Jung Jung datasets, fig.height=15, fig.width= 12}
+
+#4.xCell
+# Run deconvolution analysis and generate heatmap for xCell
 xcell_results <- as.data.frame(deconvo_tme(eset = expr_Jung, method = "xcell"))
 rownames(xcell_results) <- colnames(expr_Jung)
 xcell_results$ID <- NULL
 kable(xcell_results, format = "html", caption = "xCell Deconvolution Results") %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
 create_heatmaps(xcell_results, "xCell Results")
+```
 
+```{r ESTIMATE for Jung Jung datasets,fig.height=4, fig.width=12}
+#5.ESTIMATE
 # Run deconvolution analysis and generate heatmaps for ESTIMATE
 estimate_results <- as.data.frame(deconvo_tme(eset = expr_Jung, method = "estimate"))
 rownames(estimate_results) <- colnames(expr_Jung)
@@ -423,18 +389,17 @@ kable(estimate_results, format = "html", caption = "ESTIMATE Deconvolution Resul
   kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
 create_heatmaps(estimate_results, "ESTIMATE Results")
 
+# Challenge: Why TIMER Won't Work
 
-#TODO: check +0.001 ( it justa  shift)
-
-####find why "Timer" wont work
-
-# 1. Filter Low or Zero Expression Genes: Ensure genes that are not expressed (or expressed at low levels) in a significant number of samples are removed.
-# 
-# 2. Adjust Expression Data: Use the formula log2(TPM + 0.001) to adjust the expression data appropriately.
-# 
-# 3. Check for Zero Values and NAs: After adjusting the expression data, double-check that no zero values or NAs remain.
-# 
-# 4. Run TIMER: Once you are confident that the data is correctly prepared, you can run the TIMER analysis.
+# From the TIMER paper, consider these key steps:
+# 1. Filter Low or Zero Expression Genes:
+#    Remove genes with low or zero expression in a significant number of samples to avoid noise.
+# 2. Adjust Expression Data:
+#    Use the log2(TPM + 0.001) formula to transform expression data, ensuring proper scaling for TIMER analysis.
+# 3. Check for Zero Values and NAs:
+#    Ensure that after transformation, there are no zero values or missing data (NAs) left.
+# 4. Run TIMER:
+#    After confirming data quality, run the TIMER analysis with your adjusted and filtered expression data.
 
 # # Load your dataset (adjust the path as needed)
 # ICB_jung <- get(load(file.path(Base_dir, "data_all", "ICB_Jung__Lung__PD-(L)1.rda")))
@@ -479,32 +444,6 @@ create_heatmaps(estimate_results, "ESTIMATE Results")
 #     cat("TIMER analysis failed. Check your input data.\n")
 # }
 # 
-
-
-##TODO1: NEXTSTEP:
-# - only scaling (by Monday)--> review
-# - we have cell types ( eg.Cibersort for one dataset ,find assosiation btw cell types vs IO outcoumne( OS/PFS/Response)  )--> assosiation functions based on function ( Gneesiglogreg, os pfs)
-# potentially update the function for genesigs and cell sigs.
-#tehen other methos ( at least one)
-
-##TODO2: QC for abacus, oak, poplar
-
-
-##TODO3: insight- update sigs- (interestId)
-##TODO4:charoenting -list of gene_listof function-
-#- gensigIPSfunction ( calling two function)column #gene--
-
-##TODO5: list of allsignitures check assisitation by the each papaer  and predicio.ca
-
-
-##TODO6: github "predioR"(geneSigMean.R)- wa supdated ( fo genedsig.. wa upadted )
-
-## TODO7:we want to add TMB score. (inspire,pola,oak, Immotion150)
-# wecan generate TMB score. ICB_Common ( how we quick extract Rna fsq tmscore extract)---> check TMB score from the H4h or ICB_Common.pipline finding
-
-## TODO8:next steps:Function piline Rna-->TMB score.
-
-#TMB and assosiation --insight---
-
 ```
+
 
