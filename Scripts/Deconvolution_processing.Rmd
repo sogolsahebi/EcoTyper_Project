@@ -296,6 +296,11 @@ select(-`P-value`, -`Correlation`, -`RMSE`)
 # Scaled Heatmap
 # Scale and cap the filtered CIBERSORT results between -4 and 4
 scaled_cibersort_results <- as.data.frame(scale(filtered_cibersort_results))
+
+# Print the range of scaled data
+  print(paste("Range for", "Cibersort", ":"))
+  print(range(scaled_cibersort_results))
+  
 #scaled_cibersort_results <- pmax(pmin(scaled_cibersort_results, 4), -4)
 
 reorder_index <- order(clin_jung$response)
@@ -330,6 +335,11 @@ create_heatmaps <- function(data, name) {
 
   # Scaled version
   data_scaled <- as.data.frame(scale(data))
+  
+  # Print the range of scaled data
+  print(paste("Range for", name, ":"))
+  print(range(data_scaled))
+  
   h_scaled <- Heatmap(t(as.matrix(data_scaled)), name = paste(name, "(Scaled)"), 
                       top_annotation = response_annotation, 
                       cluster_rows = FALSE, column_split = clin_jung$response, 
