@@ -298,9 +298,8 @@ select(-`P-value`, -`Correlation`, -`RMSE`)
 scaled_cibersort_results <- as.data.frame(scale(filtered_cibersort_results))
 
 # Print the range of scaled data
-  print(paste("Range for", "Cibersort", ":"))
-  print(range(scaled_cibersort_results))
-  
+  cat("Range for Cibersort:", range(scaled_cibersort_results), "\n")
+
 #scaled_cibersort_results <- pmax(pmin(scaled_cibersort_results, 4), -4)
 
 reorder_index <- order(clin_jung$response)
@@ -337,8 +336,7 @@ create_heatmaps <- function(data, name) {
   data_scaled <- as.data.frame(scale(data))
   
   # Print the range of scaled data
-  print(paste("Range for", name, ":"))
-  print(range(data_scaled))
+  cat("Range for", name, ":", range(data_scaled), "\n")
   
   h_scaled <- Heatmap(t(as.matrix(data_scaled)), name = paste(name, "(Scaled)"), 
                       top_annotation = response_annotation, 
@@ -349,7 +347,6 @@ create_heatmaps <- function(data, name) {
   draw(h_scaled)
 
 }
-
 
 # Example usage for EPIC, MCPcounter, xCell, and ESTIMATE results
 
@@ -389,71 +386,27 @@ kable(xcell_results, format = "html", caption = "xCell Deconvolution Results") %
 create_heatmaps(xcell_results, "xCell Results")
 ```
 
-```{r ESTIMATE for Jung Jung datasets,fig.height=4, fig.width=12}
-#5.ESTIMATE
-# Run deconvolution analysis and generate heatmaps for ESTIMATE
-estimate_results <- as.data.frame(deconvo_tme(eset = expr_Jung, method = "estimate"))
-rownames(estimate_results) <- colnames(expr_Jung)
-estimate_results$ID <- NULL
-kable(estimate_results, format = "html", caption = "ESTIMATE Deconvolution Results") %>%
+```{r Timer for Jung Jung datasets,fig.height=4, fig.width=12}
+
+# Timer method (1.)
+
+timer_results <- deconvo_timer(expr_Jung, project = NULL, indications = rep("luad",dim(expr_Jung)[2])) 
+timer_results$ID <- NULL
+kable(timer_results, format = "html", caption = "Timer Deconvolution Results") %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
-create_heatmaps(estimate_results, "ESTIMATE Results")
 
-# Challenge: Why TIMER Won't Work
+create_heatmaps(timer_results, "Timer Results")
 
-# From the TIMER paper, consider these key steps:
-# 1. Filter Low or Zero Expression Genes:
-#    Remove genes with low or zero expression in a significant number of samples to avoid noise.
-# 2. Adjust Expression Data:
-#    Use the log2(TPM + 0.001) formula to transform expression data, ensuring proper scaling for TIMER analysis.
-# 3. Check for Zero Values and NAs:
-#    Ensure that after transformation, there are no zero values or missing data (NAs) left.
-# 4. Run TIMER:
-#    After confirming data quality, run the TIMER analysis with your adjusted and filtered expression data.
+#2. Timermethod (2.)
+timer_results2 <- deconvo_tme(eset = expr_Jung, method = 
+              "timer", group_list = rep("luad", dim(expr_Jung)[2]))
 
-# # Load your dataset (adjust the path as needed)
-# ICB_jung <- get(load(file.path(Base_dir, "data_all", "ICB_Jung__Lung__PD-(L)1.rda")))
-# 
-# # Extract expression data
-# expr_Jung <- data.frame(assays(ICB_jung))
-# expr_Jung$group <- NULL
-# expr_Jung$group_name <- NULL
-# expr_Jung <- as.matrix(expr_Jung)
-# 
-# # Step 1: Filter Low or Zero Expression Genes
-# r <- as.numeric(apply(expr_Jung, 1, function(i) sum(round(i, 6) == round(log2(0.001), 6))))
-# remove <- which(r > ncol(expr_Jung) * 0.5)
-# expr_Jung_filtered <- expr_Jung[-remove, ]
-# 
-# # Step 2: Adjust Expression Data
-# expr_Jung_adjusted <- log2(expr_Jung_filtered + 0.001)
-# 
-# # Step 3: Check for NAs
-# if (any(is.na(expr_Jung_adjusted))) {
-#     stop("Expression data contains NA values. Please clean your data before proceeding.")
-# }
-# 
-# # Step 4: Check for Zero Values
-# if (any(expr_Jung_adjusted == 0)) {
-#     cat("Warning: Expression data still contains zero values after filtering.\n")
-# }
-# 
-# # Run TIMER analysis
-# timer_results <- tryCatch({
-#     as.data.frame(deconvo_tme(eset = expr_Jung_adjusted, method = "timer"))
-# }, error = function(e) {
-#     cat("Error in TIMER analysis:", e$message, "\n")
-#     NULL  # Return NULL if there's an error
-# })
-# 
-# # Check results
-# if (!is.null(timer_results)) {
-#     cat("TIMER analysis completed successfully.\n")
-#     print(head(timer_results))  # Inspect the first few rows of results
-# } else {
-#     cat("TIMER analysis failed. Check your input data.\n")
-# }
-# 
+timer_results2$ID <- NULL
+kable(timer_results2, format = "html", caption = "EPIC Deconvolution Results") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+
+create_heatmaps(timer_results2, "Timer Results 2")
+
 ```
 
 
