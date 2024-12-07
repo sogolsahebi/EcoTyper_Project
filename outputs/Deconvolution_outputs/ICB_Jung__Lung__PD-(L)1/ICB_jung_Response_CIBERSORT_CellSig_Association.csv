@@ -1,0 +1,23 @@
+"","Outcome","Gene","Study","Coef","SE","N","Pval","Cancer_type","Treatment","FDR"
+"1","R vs NR","B_cells_naive","ICB_jung",5.275,10.3,27,0.608515854652071,"Lung","PD-1/PD-L1",0.982291021718651
+"2","R vs NR","B_cells_memory","ICB_jung",4.32,11.608,27,0.709760097097516,"Lung","PD-1/PD-L1",0.982291021718651
+"3","R vs NR","Plasma_cells","ICB_jung",33.605,21.031,27,0.11007854048093,"Lung","PD-1/PD-L1",0.982291021718651
+"4","R vs NR","T_cells_CD8","ICB_jung",-2.298,8.031,27,0.774788592440156,"Lung","PD-1/PD-L1",0.982291021718651
+"5","R vs NR","T_cells_CD4_naive","ICB_jung",13.275,22.881,27,0.561811658639808,"Lung","PD-1/PD-L1",0.982291021718651
+"6","R vs NR","T_cells_CD4_memory_resting","ICB_jung",7.079,5.909,27,0.230968057104023,"Lung","PD-1/PD-L1",0.982291021718651
+"7","R vs NR","T_cells_CD4_memory_activated","ICB_jung",-14.213,14.637,27,0.33152310682265,"Lung","PD-1/PD-L1",0.982291021718651
+"9","R vs NR","T_cells_regulatory_(Tregs)","ICB_jung",8.641,23.09,27,0.708246425673668,"Lung","PD-1/PD-L1",0.982291021718651
+"11","R vs NR","NK_cells_resting","ICB_jung",7.951,21.216,27,0.707848505748545,"Lung","PD-1/PD-L1",0.982291021718651
+"12","R vs NR","NK_cells_activated","ICB_jung",-6.106,15.807,27,0.699269013491644,"Lung","PD-1/PD-L1",0.982291021718651
+"13","R vs NR","Monocytes","ICB_jung",15.617,13.88,27,0.260549416346622,"Lung","PD-1/PD-L1",0.982291021718651
+"14","R vs NR","Macrophages_M0","ICB_jung",-1.32,4.764,27,0.781738277461486,"Lung","PD-1/PD-L1",0.982291021718651
+"15","R vs NR","Macrophages_M1","ICB_jung",-5.335,8.26,27,0.518375068240422,"Lung","PD-1/PD-L1",0.982291021718651
+"16","R vs NR","Macrophages_M2","ICB_jung",-2.761,3.727,27,0.458795815425282,"Lung","PD-1/PD-L1",0.982291021718651
+"17","R vs NR","Dendritic_cells_resting","ICB_jung",-3.768,11.469,27,0.742472839553833,"Lung","PD-1/PD-L1",0.982291021718651
+"18","R vs NR","Dendritic_cells_activated","ICB_jung",-2.608,10.49,27,0.803692654133441,"Lung","PD-1/PD-L1",0.982291021718651
+"19","R vs NR","Mast_cells_resting","ICB_jung",6.37,15.179,27,0.674707981606034,"Lung","PD-1/PD-L1",0.982291021718651
+"22","R vs NR","Neutrophils","ICB_jung",-5.455,4.71,27,0.246747299711099,"Lung","PD-1/PD-L1",0.982291021718651
+"8","R vs NR","T_cells_follicular_helper","ICB_jung",0.825,16.551,27,0.960246042450558,"Lung","PD-1/PD-L1",0.995624233390724
+"10","R vs NR","T_cells_gamma_delta","ICB_jung",-1423.212,232386.725,27,0.995113525326508,"Lung","PD-1/PD-L1",0.995624233390724
+"20","R vs NR","Mast_cells_activated","ICB_jung",-0.139,5.372,27,0.979353289067156,"Lung","PD-1/PD-L1",0.995624233390724
+"21","R vs NR","Eosinophils","ICB_jung",6104.19,1113042.651,27,0.995624233390724,"Lung","PD-1/PD-L1",0.995624233390724

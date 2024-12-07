@@ -1,15 +1,17 @@
 ---
-title: "Data processing"
+title: "Data Processing"
 author: "Nasim Bondar Sahebi"
-date: "2023-11-07"
+subtitle: "[EcoTyper_Project, Data processing](https://github.com/sogolsahebi/EcoTyper_Project)"
+date: "2024-11-01"
 output:
   html_document: default
+params:
+  show_code: true  
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 ```
-
 
 ## load libraries
 
@@ -20,12 +22,18 @@ library(dplyr)
 library(knitr)
 library(kableExtra)
 library(tools)
+library(ggplot2)
+library(networkD3)
 ```
-
 
 ## Data Loading and Preparation
 
-This section lists and displays all `.rda` files from the `data` and `data_sex` directories, representing 47 study cohorts.
+This section includes immunotherapy datasets curated in the BHK Lab, with sources available on [GitHub](https://github.com/bhklab/ClinSets/tree/main/data). The datasets are organized as follows:
+
+- **All Data**: Stored in the `data_all` folder, containing `.rda` files for each cohort (e.g., `ICB_Braun__Kidney__PD-(L)1.rda`).
+- **Data Stratified by Sex**: Stored in the `data_sex` folder, with datasets split by gender. Files for female and male data are indicated with `_F` and `_M` in the filename (e.g., `ICB_Gide__Melanoma__PD-(L)1__F.rda` for female data and `ICB_Gide__Melanoma__PD-(L)1__M.rda` for male data).
+
+This section will list and display all `.rda` files from the `data_all` and `data_sex` directories, covering a total of 56  study cohorts.
 
 
 ```{r  all data}
@@ -37,11 +45,56 @@ Base_dir <- "~/BHK lab/EcoTyper_Project/"
 data_files <- list.files(path = file.path(Base_dir, "data_all"), pattern = "\\.rda$", full.names = TRUE)
 data_sex_files <- list.files(path = file.path(Base_dir, "data_sex"), pattern = "\\.rda$", full.names = TRUE)
 
+# Create a table of all studies
 data_files_df <- data.frame(Files = basename(data_files))
-
 kable(data_files_df, caption = "All studies", col.names = "Cohorts") %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F) %>%
   scroll_box(height = "400px")
+
+
+# Initialize summary table
+summary_table <- data.frame(Dataset = character(),
+                            Cancer_Type = character(),
+                            Clinical_Endpoints = character(),
+                            Patients = integer(),
+                            Treatments = character(),
+                            stringsAsFactors = FALSE)
+
+# Loop to extract information from each dataset
+for (file in data_files) {
+  dat_icb <- get(load(file))
+  dataset_name <- sub("ICB_", "", basename(file))
+  dataset_name <- sub("\\.rda$", "", dataset_name)
+  clin <- data.frame(colData(dat_icb))
+  
+  # Extract details
+  cancer_type <- paste(unique(clin$cancer_type), collapse = ", ")
+  clinical_endpoints <- paste(ifelse(unique(clin$survival_type) == "None", "Response (R vs NR)", 
+                            unique(clin$survival_type)), collapse = ", ")
+  
+  patients <- dim(clin)[1]
+  
+  treatments <- paste(unique(clin$treatment), collapse = ", ")
+
+  
+  # Append to summary table
+  summary_table <- rbind(summary_table, data.frame(Dataset = dataset_name,
+                                                   Cancer_Type = cancer_type,
+                                                   Clinical_Endpoints = clinical_endpoints,
+                                                   Patients = patients,
+                                                   Treatments = treatments,
+                                                   stringsAsFactors = FALSE))
+
+}
+
+# Display summary table
+kable(summary_table, caption = "Summary of Immunotherapy Datasets") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F) %>%
+  scroll_box(height = "400px")
+
+
+#write.csv(summary_table, file = file.path(Base_dir, "outputs/Dataprocessing_outputs", "Summary_of_Each_Dataset_IO_Datasets.csv"), row.names = TRUE)
+
 ```
 
 ## Combine all Datasets
@@ -54,7 +107,6 @@ This section loads and combines clinical datasets from the `data` and `data_sex`
 - Displaying combined clinical data in tables.
 
 The final datasets are saved as `.rds` files for future use.
-
 
 ```{r Combine clinicaldata 1 }
 
@@ -85,8 +137,11 @@ common_columns <- Reduce(intersect, column_list)
 
 # Bind all clin dataframes using the common columns
 combined_clin <- do.call(rbind, lapply(clin_list, function(clin) {
+    clin <- data.frame(clin)
     clin[, common_columns, drop = FALSE]  # Subset to common columns
 }))
+
+combined_clin <- do.call(rbind, lapply(clin_list, function(clin) data.frame(clin)[, common_columns, drop = FALSE]))
 
 # Create study and patient identifiers
 combined_clin$study <- gsub("\\..*","", basename(rownames(combined_clin)))
@@ -100,25 +155,34 @@ data_sex_files_df <- data.frame(Files = basename(data_sex_files)) # List all dat
 column_sex_list <- list()
 clin_sex_list <- list()
 
+column_sex_list <- list()  # Initialize list for column names
+clin_sex_list <- list()    # Initialize list for clinical data
+
 for (data_sex_path in data_sex_files) {
-    obj <- load(data_sex_path)  
-    clin_sex <- get(obj)
+    obj <- load(data_sex_path )  
+    clin_sex <- data.frame(colData(get(obj)))
     
     # Set row names with base name and index
     base_name <- tools::file_path_sans_ext(basename(data_sex_path))
     rownames(clin_sex) <- paste0(base_name, "_", seq_len(nrow(clin_sex)))
     
-    column_sex_list[[data_sex_path]] <- colnames(clin_sex)  # Store column names
+    column_sex_list[[data_sex_path ]] <- colnames(clin_sex)  # Store column names
     clin_sex_list[[data_sex_path]] <- clin_sex  # Store clinical data
 }
 
 # Identify common columns across all data_sex datasets
 common_sex_columns <- Reduce(intersect, column_sex_list)
 
-# Bind all clin_sex dataframes using the common columns
+# Fully flatten clin_sex_list and bind using common columns
 combined_clin_sex <- do.call(rbind, lapply(clin_sex_list, function(clin_sex) {
-    clin_sex[, common_sex_columns, drop = FALSE]  # Subset to common columns
+    #clin_sex <- as.data.frame(clin_sex)
+    clin_sex[, common_sex_columns, drop = FALSE]
 }))
+
+# Save as csv files
+# write.csv(combined_clin, file = file.path(Base_dir, "outputs/Dataprocessing_outputs", "combined_clin_before_exclusion.csv"), row.names = TRUE)
+
+#write.csv(combined_clin_sex, file = file.path(Base_dir, "outputs/Dataprocessing_outputs", "combined_clin_sex_before_exclusion.csv"), row.names = TRUE)
 
 # Create study and patient identifiers for data_sex
 combined_clin_sex <- combined_clin_sex[!is.na(combined_clin_sex$patientid), ]
@@ -140,44 +204,53 @@ This section generates a summary table of clinical characteristics from the comb
 
 ### Exclusion Criteria:
 
-- Remove rows with the following treatments: `"IO+chemo"`, `"IO+targeted"`, `"chemo"`, `"chemo+targeted"`, and `"targeted"`.
-- Remove cancer types with fewer than 20 patients.
+We apply the following exclusions:
+
+- Remove rows with the following treatments: `"IO+chemo"`, `"IO+targeted"`, `"chemo"`, `"chemo+targeted"`, and `"targeted"`.In other words only keep `"PD-1/PD-L1"`, `"IO+combo"`, or `"CTLA4"`.
+- Remove dataset with fewer than 25 patients.
 - Exclude the cancer type `"Lymph_node"`.
 - Only include patients from the studies `"Gide"`, `"Riaz"`, and `"Abacus"`, and only include `"PRE"` samples.
-- Only keep patients with RNA-seq data (exclude microarray patients)
+- Only keep patients with RNA-seq data (exclude microarray  and NA patients)
 - only keeping PRE samples 
 
 
 ```{r Table 1 }
+# Function to apply exclusions and generate summary data
+
+
+# treatments: "PD-1/PD-L1", "CTLA4", "IO+combo", "chemo", "IO+targeted", "targeted", "IO+chemo","chemo+targeted"
+combined_clin_before <- combined_clin
+combined_clin_sex_before <- combined_clin_sex 
+
+# Remove dataset with fewer than 25 patients
+datasets_25_or_more <- paste0("ICB_", summary_table$Dataset[summary_table$Patients >= 25])
+combined_clin <- combined_clin[combined_clin$study %in% datasets_25_or_more, ]
 
 # Remove rows with treatments "IO+chemo", "IO+targeted", "chemo", "chemo+targeted", and "targeted"
+
 combined_clin <- combined_clin[!combined_clin$treatment %in% c("IO+chemo", "IO+targeted", "chemo", "chemo+targeted", "targeted"), ]
+
 combined_clin_sex <- combined_clin_sex[!combined_clin_sex$treatment %in% c("IO+chemo", "IO+targeted", "chemo", "chemo+targeted", "targeted"), ]
 
-
-# Remove cancer types with less than 20 patients
-cancer_types_less_20 <- names(table(combined_clin$cancer_type)[table(combined_clin$cancer_type) < 20])
-combined_clin <- combined_clin[!combined_clin$cancer_type %in% cancer_types_less_20, ]
-combined_clin_sex <- combined_clin_sex[!combined_clin_sex$cancer_type %in% cancer_types_less_20, ]
+# # Remove cancer types with less than 30 patients
+# cancer_types_less_30 <- names(table(combined_clin$cancer_type)[table(combined_clin$cancer_type) < 30])
+# combined_clin <- combined_clin[!combined_clin$cancer_type %in% cancer_types_less_30, ]
+# combined_clin_sex <- combined_clin_sex[!combined_clin_sex$cancer_type %in% cancer_types_less_30, ]
 
 # Remove "Lymph_node" cancer type
 combined_clin <- combined_clin[combined_clin$cancer_type != "Lymph_node", ]
 combined_clin_sex <- combined_clin_sex[combined_clin_sex$cancer_type != "Lymph_node", ]
 
-# Subset only patients with RNA-seq data (exclude microarray patients)
-combined_clin <- combined_clin[combined_clin$rna == "rnaseq", ] #186 patients removed
-combined_clin_sex <- combined_clin_sex[combined_clin_sex$rna == "rnaseq", ]
+# Subset only patients with RNA-seq data (exclude microarray and NA patients)
+# RNA-seq data types: "rnaseq", "tpm", "fpkm"
+filtered_combined_clin <- combined_clin[combined_clin$rna %in% c("rnaseq", "tpm", "fpkm"), ] # 87 patients is removed
+filtered_combined_clin_sex <- combined_clin_sex[combined_clin_sex$rna %in% c("rnaseq", "tpm", "fpkm"), ]
 
 
-#saveRDS(combined_clin, file = file.path("~/BHK LAB/EcoTyper_Project//outputs/", "combined_clin.rds"))
+# Save as csv files
+#write.csv(combined_clin, file = file.path(Base_dir, "outputs/Dataprocessing_outputs", "combined_clin_after_exclusion.csv"), row.names = TRUE)
 
-#saveRDS(combined_clin_sex, file = file.path("~/BHK LAB/EcoTyper_Project//outputs/", "combined_clin_sex.rds"))
-
-treatments <- unique(combined_clin_sex$treatment)
-cancer_types <- unique(combined_clin_sex$cancer_type)
-                          
-Characteristic <- c("N° studies", "N° patients", "Age year", "Median (IQR)", "NA (%)", "Sex", "Female (%)", "Male (%)", "NA (%)", "Cancer Type",paste0(cancer_types, " (%)"), "Treatment", paste0(treatments, " (%)"), "Response", "No-response (%)", "Response (%)", "NA (%)", "PFS", "No-progression (%)", "Progressed (%)", "NA (%)", "Median PFS", "IQR PFS", "OS", "Alive (%)", "Dead (%)", "NA (%)", "Median OS", "IQR OS")
-
+# write.csv(combined_clin_sex, file = file.path(Base_dir, "outputs/Dataprocessing_outputs", "combined_clin_sex_after_exclusion.csv"), row.names = TRUE)
 
 # Function to extract the base of the study name, ignoring the "_F" and "_M" ( for counting data sex with same study name)
 get_study_base <- function(study_name) {
@@ -186,6 +259,22 @@ get_study_base <- function(study_name) {
 
 # Generate data function with only the common treatments and cancer types
 generate_all_data <- function(data) {
+  
+  # Extract unique cancer types and treatments from the provided data
+  cancer_types <- unique(data$cancer_type)
+  treatments <- unique(data$treatment)
+  
+  # Dynamically create the Characteristic vector
+  Characteristic <-c(
+    "N° studies", "N° patients", "Age year", "Median (IQR)", "NA (%)", "Sex",
+    "Female (%)", "Male (%)", "NA (%)", "Cancer Type",
+    paste0(cancer_types, " (%)"),  # Dynamically add cancer types
+    "Treatment",
+    paste0(treatments, " (%)"),    # Dynamically add treatments
+    "Response", "No-response (%)", "Response (%)", "NA (%)",
+    "PFS", "No-progression (%)", "Progressed (%)", "NA (%)",
+    "Median PFS", "IQR PFS", "OS", "Alive (%)", "Dead (%)", "NA (%)",
+    "Median OS", "IQR OS")
   
   data$study_base <- sapply(data$study, get_study_base)
    
@@ -248,41 +337,667 @@ generate_all_data <- function(data) {
     round(IQR(data$survival_time_os, na.rm = TRUE), 1)              # IQR OS
   )
   
-  return(All_DATA)
+    # Return the combined results as a dataframe
+  return(data.frame(
+    Characteristic = Characteristic,
+    All_DATA = All_DATA
+  ))
+  
 }
 
 
-All_DATA = generate_all_data(combined_clin)
-Data_with_Sex = generate_all_data(combined_clin_sex)
-
-# Create the final dataframe with both All Data and Data with Sex
-final_df <- data.frame(
-  Characteristic = Characteristic,
-  All_DATA = generate_all_data(combined_clin),
-  Data_with_Sex = generate_all_data(combined_clin_sex)
+# Generate data for before exclusion
+before_df <- merge(
+  generate_all_data(combined_clin_before), 
+  generate_all_data(combined_clin_sex_before), 
+  by = "Characteristic", 
+  all = TRUE
 )
 
+colnames(before_df)[2] <- "All_Data"
+colnames(before_df)[3] <- "Sex_Data"
 
-kable(final_df, caption = "Summary of All Data and Data with Sex", 
+# Reorder rows to match the original order of 'Characteristic'
+order_characteristics <- generate_all_data(combined_clin_before)$Characteristic
+before_df <- before_df[match(order_characteristics, before_df$Characteristic), ]
+
+# Generate data for after exclusion
+after_df <- merge(
+  generate_all_data(combined_clin), 
+  generate_all_data(combined_clin_sex), 
+  by = "Characteristic", 
+  all = TRUE
+)
+
+colnames(after_df)[2] <- "All_Data"
+colnames(after_df)[3] <- "Sex_Data"
+
+# Reorder rows to match the original order of 'Characteristic'
+order_characteristics2 <- generate_all_data(combined_clin)$Characteristic
+after_df <- after_df[match(order_characteristics2, after_df$Characteristic), ]
+
+rownames(before_df) <-NULL
+rownames(after_df) <-NULL
+
+# write.csv(before_df, file = file.path(Base_dir, "outputs/Dataprocessing_outputs", "Summary_of_Data_Before_Exclusion.csv"), row.names = FALSE)
+# write.csv(after_df, file = file.path(Base_dir, "outputs/Dataprocessing_outputs", "Summary_of_Data_After_Exclusion.csv"), row.names = FALSE)
+
+# Display the tables using kable
+kable(before_df, caption = "Summary of All Data and Data with Sex Before Exclusion", 
+      col.names = c("Characteristic", "All Data ", "Data with Sex ")) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F) %>%
+  scroll_box(height = "400px")
+
+kable(after_df , caption = "Summary of All Data and Data with Sex After Exclusion", 
       col.names = c("Characteristic", "All Data", "Data with Sex")) %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F) %>%
   scroll_box(height = "400px")
 
-
-# write.csv(final_df, "~/BHK LAB/EcoTyper_Project/outputs/Summary of All Data and Data with Sex.csv", row.names = TRUE)
-
-
 ```
-# Studies that we are focusing on after the exclusion
+### After Dataset Exclusion
 
-```{r Studies after exclusion}
+28 datasets remain after exclusion.
 
-kable(unique(combined_clin$study), caption = "All studies", col.names = "Cohorts") %>%
+```{r cohorts_display}
+# Display all unique cohorts used in the analysis
+kable(unique(combined_clin$study), caption = "All cohorts included in the analysis", col.names = "Cohorts") %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F) %>%
   scroll_box(height = "400px")
+```
+
+## Visulizations for IO datastes 
+
+```{r Visulizations part 2 for IO datasets, width = 12, height = 8}
+
+# 1. Stacked Bar Plot: Treatments by Cancer Type
+# Purpose: Visualize the distribution of treatments across cancer types
+datasets <- gsub("^ICB_", "", unique(combined_clin$study))
+common_datasets <- intersect(summary_table$Dataset, datasets)
+summary_table_after <- summary_table[summary_table$Dataset %in% common_datasets, ]
+# Find datasets in common between summary_table$Dataset and datasets
+common_datasets <- intersect(summary_table$Dataset, datasets)
+
+# Filter summary_table to keep only rows where Dataset is in common_datasets
+summary_table_after <- summary_table[summary_table$Dataset %in% common_datasets, ]
+
+
+# Function to generate a stacked bar plot
+generate_treatment_plot <- function(data, title_prefix) {
+  treatment_summary <- data %>%
+    group_by(Cancer_Type, Treatments) %>%
+    summarise(Count = n(), .groups = "drop") %>%
+    mutate(Total_Count = sum(Count, na.rm = TRUE), .by = Cancer_Type) %>%
+    arrange(desc(Total_Count)) %>%
+    mutate(Cancer_Type = factor(Cancer_Type, levels = unique(Cancer_Type)))
+
+  plot <- ggplot(treatment_summary, aes(x = Cancer_Type, y = Count, fill = Treatments)) +
+    geom_bar(stat = "identity", position = "stack") +
+    geom_text(aes(label = Count), position = position_stack(vjust = 0.5), size = 3) +
+    theme_minimal() +
+    labs(
+      title = paste0(title_prefix, " (", length(unique(data$Dataset)), " datasets)"),
+      x = "Cancer Type", y = "Count", fill = "Treatment"
+    ) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  
+  return(plot)
+}
+
+# Generate plots
+treatment_bar_plot_full <- generate_treatment_plot(summary_table, "Treatments by Cancer Type (Full Dataset)")
+treatment_bar_plot_filtered <- generate_treatment_plot(summary_table_after, "Treatments by Cancer Type (Filtered Dataset)")
+
+# Display plots and captions
+treatment_bar_plot_full
+treatment_bar_plot_filtered
+
 
 ```
 
+
+
+```{r Visulizations part 3 for IO datasets, width = 12, height = 8}
+
+# 2. Boxplot: Age Distribution by Cancer Type
+# Purpose: Display the age distribution across cancer types with median and patient counts
+create_age_distribution_plot <- function(data, title_suffix) {
+  # Filter data for non-numeric ages
+  filtered_data <- data %>%
+    filter(!is.na(as.numeric(age)))
+  
+  # Calculate patient counts
+  cancer_type_patient_counts <- filtered_data %>%
+    group_by(cancer_type) %>%
+    summarise(Patient_Count = n(), .groups = "drop")
+  
+  # Find max age
+  max_age <- max(as.numeric(filtered_data$age), na.rm = TRUE)
+  
+  # Generate plot
+  plot <- ggplot(filtered_data, aes(x = cancer_type, y = as.numeric(age))) +
+    geom_boxplot(fill = "lightblue") +
+    stat_summary(fun = median, geom = "text", aes(label = round(..y.., 1)), vjust = -0.5, color = "darkred", size = 4) +
+    geom_text(data = cancer_type_patient_counts, 
+              aes(x = cancer_type, y = max_age + 5, label = paste0("n=", Patient_Count)),
+              size = 4, fontface = "bold", color = "black") +
+    theme_minimal() +
+    labs(
+      title = paste("Age Distribution by Cancer Type", title_suffix),
+      x = "Cancer Type", y = "Age (Years)"
+    ) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  
+  return(plot)
+}
+
+# Generate plots
+age_distribution_plot_before <- create_age_distribution_plot(combined_clin_before, "(Before Filtering)")
+age_distribution_plot <- create_age_distribution_plot(combined_clin, "(After Filtering)")
+
+# Save plots if needed
+# ggsave(filename = file.path(Base_dir, "outputs/Dataprocessing_outputs/Plots/Age_Distribution_by_Cancer_Type_Before_Filtering.png"), 
+#        plot = age_distribution_plot_before, bg = "white")
+# ggsave(filename = file.path(Base_dir, "outputs/Dataprocessing_outputs/Plots/Age_Distribution_by_Cancer_Type_After_Filtering.png"), 
+#        plot = age_distribution_plot, bg = "white")
+
+age_distribution_plot
+
+```
+
+```{r Visulizations for IO datasets, width = 15, height = 8}
+
+# 3. Stacked Bar Plot: Patients by Cancer Type and Treatment
+# Purpose: Summarize and visualize the number of patients across cancer types and treatments
+
+# Function for summarizing data and generating bar plots
+create_summary_plot <- function(data, title_prefix) {
+  # Summarize data for the plot
+  summary_plot_data <- data %>%
+    group_by(Cancer_Type, Treatments) %>%
+    summarise(Patients = sum(Patients, na.rm = TRUE), .groups = "drop") %>%
+    mutate(Total_Patients = sum(Patients, na.rm = TRUE), .by = Cancer_Type)
+  
+  # Summarize data and calculate total patients per Cancer Type
+  summary_plot_data <- summary_plot_data %>%
+    group_by(Cancer_Type) %>%
+    mutate(Total_Patients = sum(Patients, na.rm = TRUE)) %>%
+    ungroup()
+  
+  # Reorder Cancer_Type by Total Patients
+  summary_plot_data <- summary_plot_data %>%
+    mutate(Cancer_Type = factor(Cancer_Type, levels = summary_plot_data %>%
+                                  group_by(Cancer_Type) %>%
+                                  summarise(Total_Patients = sum(Patients, na.rm = TRUE)) %>%
+                                  arrange(desc(Total_Patients)) %>%
+                                  pull(Cancer_Type)))
+  
+  # Create the bar plot ordered by Total Patients
+  patient_bar_plot <- ggplot(summary_plot_data, aes(x = Cancer_Type, y = Patients, fill = Treatments)) +
+    geom_bar(stat = "identity", position = "stack") +
+    theme_minimal() +
+    labs(
+      title = paste0(title_prefix, " ", length(unique(data$Dataset)), " "),
+      x = "Cancer Type", y = "Number of Patients", fill = "Treatment Type"
+    ) +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      plot.title = element_text(size = 14, face = "bold")
+    )
+  
+  return(patient_bar_plot)
+}
+
+# Generate plots for both datasets
+plot_full <- create_summary_plot(summary_table, "Number of Patients by Cancer Type and Treatment (Full Dataset)")
+plot_filtered <- create_summary_plot(summary_table_after, "Number of Patients by Cancer Type and Treatment (Filtered Dataset)")
+
+# Save the plots
+# ggsave(filename = file.path(Base_dir, "outputs/Dataprocessing_outputs/Plots/Patients_by_Cancer_Type_and_Treatment_Full.png"), plot = plot_full, bg = "white")
+# ggsave(filename = file.path(Base_dir, "outputs/Dataprocessing_outputs/Plots/Patients_by_Cancer_Type_and_Treatment_Filtered.png"), plot = plot_filtered, bg = "white")
+
+
+# Display the plots
+print(plot_full)
+print(plot_filtered)
+
+```
+
+```{r Pie charts , width = 15, height = 820}
+
+# Function to create a pie chart
+create_pie_chart <- function(data, title, fill_label, fill_column) {
+  ggplot(data, aes(x = "", y = Total_Patients, fill = reorder(!!sym(fill_column), -Total_Patients))) +
+    geom_bar(stat = "identity", width = 1) +
+    coord_polar("y", start = 0) +
+    theme_void() +
+    geom_text(aes(label = paste0(Percentage, "%\n(n=", Total_Patients, ")")),
+              position = position_stack(vjust = 0.5), size = 3) +
+    labs(title = title, fill = fill_label) +
+    theme(
+      plot.title = element_text(hjust = 0.5, size = 13),
+      legend.title = element_text(size = 12),
+      legend.text = element_text(size = 10)
+    )
+}
+
+# Summarize data for Treatment pie chart (Before Exclusion)
+treatment_summary_before <- summary_table %>%
+  group_by(Treatments) %>%
+  summarise(Total_Patients = sum(Patients), .groups = "drop") %>%
+  mutate(Percentage = round((Total_Patients / sum(Total_Patients)) * 100, 2)) %>%
+  arrange(desc(Total_Patients))
+
+# Exclude specific treatments
+treatment_summary_filtered <- treatment_summary_before %>%
+  filter(!Treatments %in% c("chemo", "chemo+targeted", "targeted"))
+
+# Summarize data for Cancer Type pie chart (Before Exclusion)
+cancer_type_summary_before <- summary_table %>%
+  group_by(Cancer_Type) %>%
+  summarise(Total_Patients = sum(Patients), .groups = "drop") %>%
+  mutate(Percentage = round((Total_Patients / sum(Total_Patients)) * 100, 2)) %>%
+  arrange(desc(Total_Patients))
+
+# Combine smaller cancer types into "Others" for Before Exclusion
+total_patients <- sum(cancer_type_summary_before$Total_Patients)
+cancer_type_summary_combined <- cancer_type_summary_before %>%
+  mutate(
+    Cancer_Type = ifelse(
+      Cancer_Type %in% c("Esophageal", "Colon", "Lymph_node", "Unknown", "HNC", "Liver"),
+      "Others (Esophageal, Colon, Lymph_node, Unknown, HNC, Liver)",
+      Cancer_Type
+    )
+  ) %>%
+  group_by(Cancer_Type) %>%
+  summarise(Total_Patients = sum(Total_Patients), .groups = "drop") %>%
+  mutate(Percentage = round((Total_Patients / total_patients) * 100, 2)) %>%
+  arrange(desc(Total_Patients))
+
+# Create Treatment pie chart (Before Exclusion)
+treatment_pie_before <- create_pie_chart(treatment_summary_filtered, "Patient Distribution by Treatment (Before Exclusion)", "Treatment Type", "Treatments")
+
+# Create Cancer Type pie chart (Before Exclusion)
+cancer_type_pie_before <- create_pie_chart(cancer_type_summary_combined, "Patient Distribution by Cancer Type (Before Exclusion)", "Cancer Type", "Cancer_Type")
+
+# Filter summary_table to keep only rows with datasets in `common_datasets`
+excluded_study <- sub("ICB_", "", unique(combined_clin$study))
+summary_table_after <- summary_table[summary_table$Dataset %in% excluded_study, ]
+
+# Summarize data for Treatment pie chart (After Exclusion)
+treatment_summary_after <- summary_table_after %>%
+  group_by(Treatments) %>%
+  summarise(Total_Patients = sum(Patients), .groups = "drop") %>%
+  mutate(Percentage = round((Total_Patients / sum(Total_Patients)) * 100, 2)) %>%
+  arrange(desc(Total_Patients))
+
+# Summarize data for Cancer Type pie chart (After Exclusion)
+cancer_type_summary_after <- summary_table_after %>%
+  group_by(Cancer_Type) %>%
+  summarise(Total_Patients = sum(Patients), .groups = "drop") %>%
+  mutate(Percentage = round((Total_Patients / sum(Total_Patients)) * 100, 2)) %>%
+  arrange(desc(Total_Patients))
+
+# Combine smaller cancer types into "Others" for After Exclusion
+total_patients_after <- sum(cancer_type_summary_after$Total_Patients)
+cancer_type_summary_combined_after <- cancer_type_summary_after %>%
+  mutate(
+    Cancer_Type = ifelse(
+      Cancer_Type %in% c("Esophageal", "Pancreas", "Gastric", "Brain", "Ureteral"),
+      "Others (Esophageal, Colon, Lymph_node, Unknown, HNC, Liver)",
+      Cancer_Type
+    )
+  ) %>%
+  group_by(Cancer_Type) %>%
+  summarise(Total_Patients = sum(Total_Patients), .groups = "drop") %>%
+  mutate(
+    Percentage = round((Total_Patients / total_patients_after) * 100, 2)
+  ) %>%
+  arrange(desc(Total_Patients))
+
+# Create Treatment pie chart (After Exclusion)
+treatment_pie_after <- create_pie_chart(treatment_summary_after, "Patient Distribution by Treatment (After Exclusion)", "Treatment Type", "Treatments")
+
+# Create Cancer Type pie chart (After Exclusion)
+cancer_type_pie_after <- create_pie_chart(cancer_type_summary_combined_after, "Patient Distribution by Cancer Type (After Exclusion)", "Cancer Type", "Cancer_Type")
+
+# Display pie charts
+print(treatment_pie_before)
+print(cancer_type_pie_before)
+print(treatment_pie_after)
+print(cancer_type_pie_after)
+```
+
+```{r Snakey diagram for IO datasets}
+
+library(networkD3)
+library(dplyr)
+
+# Calculate total patients
+total_patients <- sum(summary_table$Patients, na.rm = TRUE)
+
+# Summarize data for Sankey diagram
+summary_sankey <- summary_table %>%
+  group_by(Cancer_Type, Treatments, Clinical_Endpoints) %>%
+  summarise(Total_Patients = sum(Patients, na.rm = TRUE), .groups = "drop") %>%
+  mutate(Response = ifelse(Cancer_Type %in% c("Bladder", "Lung", "Melanoma"), "Responders", "Non-Responders"))
+
+# Prepare Nodes
+nodes <- data.frame(
+  name = c(
+    paste0("Total Patients\n(n=", total_patients, ")"),
+    paste0(unique(summary_sankey$Cancer_Type), "\n(n=", 
+           sapply(unique(summary_sankey$Cancer_Type), function(ct) sum(summary_sankey$Total_Patients[summary_sankey$Cancer_Type == ct])), 
+           ")"),
+    paste0(unique(summary_sankey$Treatments), "\n(n=", 
+           sapply(unique(summary_sankey$Treatments), function(t) sum(summary_sankey$Total_Patients[summary_sankey$Treatments == t])), 
+           ")"),
+    paste0(unique(summary_sankey$Clinical_Endpoints), "\n(n=", 
+           sapply(unique(summary_sankey$Clinical_Endpoints), function(ce) sum(summary_sankey$Total_Patients[summary_sankey$Clinical_Endpoints == ce])), 
+           ")"),
+    "Responders", "Non-Responders"
+  )
+)
+
+# Prepare Links
+# First layer: Total Patients to Cancer Types
+links <- summary_sankey %>%
+  group_by(Cancer_Type) %>%
+  summarise(Total_Patients = sum(Total_Patients)) %>%
+  mutate(
+    source = 0, # First node (Total Patients)
+    target = match(paste0(Cancer_Type, "\n(n=", 
+                          sapply(Cancer_Type, function(ct) sum(summary_sankey$Total_Patients[summary_sankey$Cancer_Type == ct])), 
+                          ")"), nodes$name) - 1,
+    value = Total_Patients
+  ) %>%
+  select(source, target, value)
+
+# Second layer: Cancer Types to Treatments
+links <- links %>%
+  bind_rows(
+    summary_sankey %>%
+      mutate(
+        source = match(paste0(Cancer_Type, "\n(n=", 
+                              sapply(Cancer_Type, function(ct) sum(summary_sankey$Total_Patients[summary_sankey$Cancer_Type == ct])), 
+                              ")"), nodes$name) - 1,
+        target = match(paste0(Treatments, "\n(n=", 
+                              sapply(Treatments, function(t) sum(summary_sankey$Total_Patients[summary_sankey$Treatments == t])), 
+                              ")"), nodes$name) - 1,
+        value = Total_Patients
+      ) %>%
+      select(source, target, value)
+  )
+
+# Third layer: Treatments to Responses
+links <- links %>%
+  bind_rows(
+    summary_sankey %>%
+      mutate(
+        source = match(paste0(Treatments, "\n(n=", 
+                              sapply(Treatments, function(t) sum(summary_sankey$Total_Patients[summary_sankey$Treatments == t])), 
+                              ")"), nodes$name) - 1,
+        target = ifelse(Response == "Responders", match("Responders", nodes$name) - 1, match("Non-Responders", nodes$name) - 1),
+        value = Total_Patients
+      ) %>%
+      select(source, target, value)
+  )
+
+# Fourth layer: Treatments to Clinical Endpoints
+links <- links %>%
+  bind_rows(
+    summary_sankey %>%
+      mutate(
+        source = match(paste0(Treatments, "\n(n=", 
+                              sapply(Treatments, function(t) sum(summary_sankey$Total_Patients[summary_sankey$Treatments == t])), 
+                              ")"), nodes$name) - 1,
+        target = match(paste0(Clinical_Endpoints, "\n(n=", 
+                              sapply(Clinical_Endpoints, function(ce) sum(summary_sankey$Total_Patients[summary_sankey$Clinical_Endpoints == ce])), 
+                              ")"), nodes$name) - 1,
+        value = Total_Patients
+      ) %>%
+      select(source, target, value)
+  )
+
+# Create Sankey Diagram
+sankey <- sankeyNetwork(
+  Links = links, Nodes = nodes,
+  Source = "source", Target = "target",
+  Value = "value", NodeID = "name",
+  units = "Patients", fontSize = 12, nodeWidth = 30,
+  width = 800, height = 450,
+  nodePadding = 10
+)
+
+# Save Sankey Diagram as HTML
+# saveNetwork(sankey, file = file.path("~/BHK lab/EcoTyper_Project//outputs/", "Sankey_Cancer_Treatments_Response_Annotated.html"))
+
+
+# Display the Sankey Diagram
+sankey
+```
+
+```{r Snakey2 diagram for IO datasets}
+
+
+generate_annotated_sankey <- function(data, output_filename) {
+
+  # Calculate the total number of patients for percentages
+  total_patients <- sum(data$Patients, na.rm = TRUE)
+  
+  # Summarize data for Sankey diagram
+  summary_sankey <- data %>%
+    group_by(Cancer_Type, Treatments) %>%
+    summarise(Total_Patients = sum(Patients, na.rm = TRUE), .groups = "drop") %>%
+    mutate(Response = ifelse(Cancer_Type %in% c("Bladder", "Lung", "Melanoma"), "Responders", "Non-Responders"))
+  
+  # Prepare Nodes with percentages and counts
+  nodes <- data.frame(
+    name = c(
+      paste0("Total Patients (n=", total_patients, ")"),
+      paste0(unique(summary_sankey$Cancer_Type), " (n=", 
+             sapply(unique(summary_sankey$Cancer_Type), function(x) 
+               sum(summary_sankey$Total_Patients[summary_sankey$Cancer_Type == x])), 
+             ", ", 
+             round(sapply(unique(summary_sankey$Cancer_Type), function(x) 
+               sum(summary_sankey$Total_Patients[summary_sankey$Cancer_Type == x]) / total_patients * 100), 2), 
+             "%)"),
+      paste0(unique(summary_sankey$Treatments), " (n=", 
+             sapply(unique(summary_sankey$Treatments), function(x) 
+               sum(summary_sankey$Total_Patients[summary_sankey$Treatments == x])), 
+             ", ", 
+             round(sapply(unique(summary_sankey$Treatments), function(x) 
+               sum(summary_sankey$Total_Patients[summary_sankey$Treatments == x]) / total_patients * 100), 2), 
+             "%)"),
+      paste0(c("Responders", "Non-Responders"), " (n=", 
+             c(sum(summary_sankey$Total_Patients[summary_sankey$Response == "Responders"]),
+               sum(summary_sankey$Total_Patients[summary_sankey$Response == "Non-Responders"])),
+             ", ", 
+             c(round(sum(summary_sankey$Total_Patients[summary_sankey$Response == "Responders"]) / total_patients * 100, 2),
+               round(sum(summary_sankey$Total_Patients[summary_sankey$Response == "Non-Responders"]) / total_patients * 100, 2)),
+             "%)")
+    )
+  )
+  
+  # Prepare Links
+  links <- summary_sankey %>%
+    mutate(
+      source_total = 0, # Link all cancer types to Total Patients node
+      source_cancer = match(Cancer_Type, gsub(" \\(.*", "", nodes$name)) - 1,
+      target_treatment = match(Treatments, gsub(" \\(.*", "", nodes$name)) - 1,
+      target_response = ifelse(Response == "Responders", match("Responders", gsub(" \\(.*", "", nodes$name)) - 1, match("Non-Responders", gsub(" \\(.*", "", nodes$name)) - 1)
+    ) %>%
+    select(source = source_total, target = source_cancer, value = Total_Patients) %>%
+    bind_rows(
+      summary_sankey %>%
+        mutate(
+          source = match(Cancer_Type, gsub(" \\(.*", "", nodes$name)) - 1,
+          target = match(Treatments, gsub(" \\(.*", "", nodes$name)) - 1,
+          value = Total_Patients
+        ) %>%
+        select(source, target, value)
+    ) %>%
+    bind_rows(
+      summary_sankey %>%
+        mutate(
+          source = match(Treatments, gsub(" \\(.*", "", nodes$name)) - 1,
+          target = ifelse(Response == "Responders", match("Responders", gsub(" \\(.*", "", nodes$name)) - 1, match("Non-Responders", gsub(" \\(.*", "", nodes$name)) - 1),
+          value = Total_Patients
+        ) %>%
+        select(source, target, value)
+    )
+  
+  # Create Sankey Diagram
+  sankey <- sankeyNetwork(
+    Links = links, Nodes = nodes,
+    Source = "source", Target = "target",
+    Value = "value", NodeID = "name",
+    units = "Patients", fontSize = 14, nodeWidth = 30,
+    width = 1020, height = 480,
+  )
+  
+  # Return the Sankey Diagram for visualization in the session
+  return(sankey)
+}
+
+# Usage
+# For summary_table
+sankey_beforee <- generate_annotated_sankey(summary_table, "Sankey_Before_Exclusion.html")
+
+# For summary_table_after
+sankey_afterr <- generate_annotated_sankey(summary_table_after, "Sankey_After_Exclusion.html")
+
+sankey_beforee
+sankey_afterr
+
+# saveNetwork(sankey_beforee, file = "~/BHK lab/EcoTyper_Project/outputs/Dataprocessing_outputs/Plots/2Sankey_Cancer_Treatments_Endpoints_Before.html")
+# saveNetwork(sankey_afterr, file = "~/BHK lab/EcoTyper_Project/outputs/Dataprocessing_outputs/Plots/2Sankey_Cancer_Treatments_Endpoints_After2.html")
+
+``` 
+
+```{r Snakey after for IO datasets}
+
+
+
+# Function to generate a Sankey diagram with percentages
+generate_sankey_with_percentages <- function(data) {
+  # Calculate total patients
+  total_patients <- sum(data$Patients, na.rm = TRUE)
+  
+  # Summarize data for Sankey diagram
+  summary_sankey <- data %>%
+    group_by(Cancer_Type, Treatments, Clinical_Endpoints) %>%
+    summarise(Total_Patients = sum(Patients, na.rm = TRUE), .groups = "drop")
+  
+  # Prepare Nodes with counts and percentages
+  nodes <- data.frame(
+    name = c(
+      paste0("Total Patients\n(n=", total_patients, ", 100%)"),
+      paste0(unique(summary_sankey$Cancer_Type), "\n(n=", 
+             sapply(unique(summary_sankey$Cancer_Type), function(ct) sum(summary_sankey$Total_Patients[summary_sankey$Cancer_Type == ct])), 
+             ", ", 
+             round(sapply(unique(summary_sankey$Cancer_Type), function(ct) 
+               sum(summary_sankey$Total_Patients[summary_sankey$Cancer_Type == ct]) / total_patients * 100), 2), 
+             "%)"),
+      paste0(unique(summary_sankey$Treatments), "\n(n=", 
+             sapply(unique(summary_sankey$Treatments), function(t) sum(summary_sankey$Total_Patients[summary_sankey$Treatments == t])), 
+             ", ", 
+             round(sapply(unique(summary_sankey$Treatments), function(t) 
+               sum(summary_sankey$Total_Patients[summary_sankey$Treatments == t]) / total_patients * 100), 2), 
+             "%)"),
+      paste0(unique(summary_sankey$Clinical_Endpoints), "\n(n=", 
+             sapply(unique(summary_sankey$Clinical_Endpoints), function(ce) sum(summary_sankey$Total_Patients[summary_sankey$Clinical_Endpoints == ce])), 
+             ", ", 
+             round(sapply(unique(summary_sankey$Clinical_Endpoints), function(ce) 
+               sum(summary_sankey$Total_Patients[summary_sankey$Clinical_Endpoints == ce]) / total_patients * 100), 2), 
+             "%)")
+    )
+  )
+  
+  # Prepare Links
+  # First layer: Total Patients to Cancer Types
+  links <- summary_sankey %>%
+    group_by(Cancer_Type) %>%
+    summarise(Total_Patients = sum(Total_Patients)) %>%
+    mutate(
+      source = 0, # First node (Total Patients)
+      target = match(paste0(Cancer_Type, "\n(n=", 
+                            sapply(Cancer_Type, function(ct) sum(summary_sankey$Total_Patients[summary_sankey$Cancer_Type == ct])), 
+                            ", ", 
+                            round(sapply(Cancer_Type, function(ct) 
+                              sum(summary_sankey$Total_Patients[summary_sankey$Cancer_Type == ct]) / total_patients * 100), 2), 
+                            "%)"), nodes$name) - 1,
+      value = Total_Patients
+    ) %>%
+    select(source, target, value)
+  
+  # Second layer: Cancer Types to Treatments
+  links <- links %>%
+    bind_rows(
+      summary_sankey %>%
+        mutate(
+          source = match(paste0(Cancer_Type, "\n(n=", 
+                                sapply(Cancer_Type, function(ct) sum(summary_sankey$Total_Patients[summary_sankey$Cancer_Type == ct])), 
+                                ", ", 
+                                round(sapply(Cancer_Type, function(ct) 
+                                  sum(summary_sankey$Total_Patients[summary_sankey$Cancer_Type == ct]) / total_patients * 100), 2), 
+                                "%)"), nodes$name) - 1,
+          target = match(paste0(Treatments, "\n(n=", 
+                                sapply(Treatments, function(t) sum(summary_sankey$Total_Patients[summary_sankey$Treatments == t])), 
+                                ", ", 
+                                round(sapply(Treatments, function(t) 
+                                  sum(summary_sankey$Total_Patients[summary_sankey$Treatments == t]) / total_patients * 100), 2), 
+                                "%)"), nodes$name) - 1,
+          value = Total_Patients
+        ) %>%
+        select(source, target, value)
+    )
+  
+  # Third layer: Treatments to Clinical Endpoints
+  links <- links %>%
+    bind_rows(
+      summary_sankey %>%
+        mutate(
+          source = match(paste0(Treatments, "\n(n=", 
+                                sapply(Treatments, function(t) sum(summary_sankey$Total_Patients[summary_sankey$Treatments == t])), 
+                                ", ", 
+                                round(sapply(Treatments, function(t) 
+                                  sum(summary_sankey$Total_Patients[summary_sankey$Treatments == t]) / total_patients * 100), 2), 
+                                "%)"), nodes$name) - 1,
+          target = match(paste0(Clinical_Endpoints, "\n(n=", 
+                                sapply(Clinical_Endpoints, function(ce) sum(summary_sankey$Total_Patients[summary_sankey$Clinical_Endpoints == ce])), 
+                                ", ", 
+                                round(sapply(Clinical_Endpoints, function(ce) 
+                                  sum(summary_sankey$Total_Patients[summary_sankey$Clinical_Endpoints == ce]) / total_patients * 100), 2), 
+                                "%)"), nodes$name) - 1,
+          value = Total_Patients
+        ) %>%
+        select(source, target, value)
+    )
+  
+  # Create Sankey Diagram
+  sankey <- sankeyNetwork(
+    Links = links, Nodes = nodes,
+    Source = "source", Target = "target",
+    Value = "value", NodeID = "name",
+    units = "Patients", fontSize = 12, nodeWidth = 30,
+    nodePadding = 10, width = 1050, height = 600
+  )
+  
+  # Return the Sankey Diagram for visualization in the session
+  return(sankey)
+}
+
+# Usage Example
+sankey_before <- generate_sankey_with_percentages(summary_table)
+sankey_after <- generate_sankey_with_percentages(summary_table_after)
+
+sankey_before
+sankey_after
+
+# saveNetwork(sankey_befor, file = "~/BHK lab/EcoTyper_Project/outputs/Dataprocessing_outputs/Plots/Sankey_Cancer_Treatments_Endpoints_Before.html")
+# saveNetwork(sankey_after, file = "~/BHK lab/EcoTyper_Project/outputs/Dataprocessing_outputs/Plots/Sankey_Cancer_Treatments_Endpoints_After.html")
+
+```
 
 ## Detailed clinical characteristics of the IO datasets
 
@@ -373,8 +1088,7 @@ kable(results_df, caption = "Detailed clinical characteristics of the IO dataset
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F) %>%
   scroll_box(height = "400px")
 
-#write.csv(results_df, "~/BHK LAB/EcoTyper_Project/outputs/Detailed_clinical_characteristics_of_the_IO_datasets.csv", row.names = FALSE)
-
+#write.csv(results_df, file = file.path(Base_dir, "outputs/Dataprocessing_outputs", "Detailed_clinical_characteristics_of_the_IO_datasets.csv"), row.names = FALSE)
 
 ```
 
@@ -467,9 +1181,9 @@ kable(results_df_sex, caption = "Detailed clinical characteristics of the IO dat
   scroll_box(height = "400px")
 
 
-# Write to CSV
-write.csv(results_df_sex, "~/BHK LAB/EcoTyper_Project/outputs/Detailed_clinical_characteristics_of_the_IO_datasets_combined_clin_sex.csv", row.names = FALSE)
+#save csv file
 
+#write.csv(results_df_sex, file = file.path(Base_dir, "outputs/Dataprocessing_outputs", "Detailed_clinical_characteristics_of_the_IO_datasets_with_sex.csv"), row.names = FALSE)
 ```
 
 
