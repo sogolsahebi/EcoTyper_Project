@@ -3,8 +3,6 @@
 ### **Immune Deconvolution and Meta-Analysis**
 This repository contains scripts and outputs for immune cell deconvolution and meta-analysis of immunotherapy datasets. It aims to identify immune cell types and features associated with clinical outcomes, such as **Overall Survival (OS)**, **Progression-Free Survival (PFS)**, and **Response (R vs NR)** across various cancer types and treatments.
 
----
-
 #### **Project Workflow**
 1. **Data Processing**:
    - Script: `Data_processing.Rmd`
@@ -26,7 +24,6 @@ This repository contains scripts and outputs for immune cell deconvolution and m
      - Pan-Cancer analysis.
      - Cancer-specific insights.
      - Treatment-specific associations.
----
 
 #### **Repository Structure**
 ```plaintext
@@ -41,8 +38,6 @@ This repository contains scripts and outputs for immune cell deconvolution and m
 │   └── MetaAnalysis_outputs/     # Meta-analysis results
 └── README.md                     # Project overview
 ```
-
----
 
 #### **Key Datasets**
 | Dataset         | Cancer Type     | Sample Size | Clinical Endpoints      | Molecular Data                     | PMID                                               |
@@ -70,5 +65,3 @@ This repository contains scripts and outputs for immune cell deconvolution and m
 | ICB_Snyder      | Ureteral        | 25          | PFS/OS                   | PD-1/PD-L1                         | [28552987](https://pubmed.ncbi.nlm.nih.gov/28552987/) |
 | ICB_Van_Allen   | Melanoma        | 42          | PFS/OS                   | CTLA4                              | [26359337](https://pubmed.ncbi.nlm.nih.gov/26359337/) |
 | ICB_VanDenEnde  | Esophageal      | 35          | PFS/OS                   | PD-L1                              | [33504550](https://pubmed.ncbi.nlm.nih.gov/33504550/) |
-
----
